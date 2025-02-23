@@ -8,8 +8,6 @@ def new_file():
     arch_abierto = None
     text_area.delete("1.0", tk.END)
     text_area.config(state=tk.NORMAL)
-    update_line_numbers()
-    text_area.yview(tk.END)  # Desplazar automáticamente al final
 
 def open_file():
     global arch_abierto
@@ -22,15 +20,13 @@ def open_file():
             text_area.delete("1.0", tk.END)
             text_area.insert("1.0", archivo.read())
         text_area.config(state=tk.NORMAL)
-        update_line_numbers()
-        text_area.yview(tk.END)  # Desplazar automáticamente al final
 
 def save_file():
     if not arch_abierto:
         save_file_as()
     with open(arch_abierto, "w", encoding="utf-8") as archivo:
         archivo.write(text_area.get("1.0", tk.END))
-
+        
 def save_file_as():
     ruta = filedialog.asksaveasfilename(
             defaultextension=".txt",
@@ -40,13 +36,6 @@ def save_file_as():
     if ruta:
         with open(ruta, "w", encoding="utf-8") as archivo:
             archivo.write(text_area.get("1.0", tk.END))
-            
-
-def update_line_column():
-    # Obtén el índice del cursor y extrae línea y columna
-    line, col = text_area.index(tk.INSERT).split(".")
-    line_label.config(text=f"Línea: {line}")
-    col_label.config(text=f"Columna: {col}")
 
 def close_app():
     root.quit()
@@ -54,6 +43,12 @@ def close_app():
 def resize_icon(image_path, size=(18, 18)):
     icon = tk.PhotoImage(file=image_path)
     return icon.subsample(int(icon.width() / size[0]), int(icon.height() / size[1]))
+
+def update_line_column(event):
+    # Obtén el índice del cursor y extrae línea y columna
+    line, col = text_area.index(tk.INSERT).split(".")
+    line_label.config(text=f"Línea: {line}")
+    col_label.config(text=f"Columna: {col}")
 
 root = tk.Tk()
 root.title("Compilador")
@@ -116,69 +111,10 @@ main_panel.pack(fill=tk.BOTH, expand=True)
 
 # Panel para el área de texto
 text_panel = tk.Frame(main_panel)
+text_area = scrolledtext.ScrolledText(text_panel, wrap=tk.WORD)
+text_area.pack(expand=True, fill=tk.BOTH)
 
-# Agregar el Scrollbar para el conjunto
-scrollbar = tk.Scrollbar(text_panel, orient="vertical")
-
-# Crear un widget 'Text' para los números de línea, alineado a la izquierda
-line_numbers_panel = tk.Text(text_panel, width=4, padx=5, bg="lightgray", bd=0, height=30, font=("Courier", 10), state="disabled", yscrollcommand=scrollbar.set)
-line_numbers_panel.pack(side=tk.LEFT, fill=tk.Y)
-
-# Área de texto (con Scrollbar)
-text_area = tk.Text(text_panel, wrap=tk.WORD, undo=True, width=80, height=30, font=("Courier", 10), yscrollcommand=scrollbar.set)
-text_area.pack(expand=True, fill=tk.BOTH, side=tk.LEFT)
-
-# Configuración del scrollbar para el conjunto
-scrollbar.config(command=lambda *args: [line_numbers_panel.yview(*args), text_area.yview(*args)])
-scrollbar.pack(side=tk.LEFT, fill=tk.Y)
-
-# Función para sincronizar el desplazamiento
-def sync_scroll(event):
-    line_numbers_panel.yview_moveto(text_area.yview()[0])
-
-def update_line_numbers(event=None):
-    # Guardar la posición actual del desplazamiento vertical
-    current_yview = text_area.yview()
-
-    # Obtén el número de líneas en el área de texto
-    lines = text_area.get("1.0", "end-1c").splitlines()
-    
-    # Hacer que la edición de números de línea sea posible
-    line_numbers_panel.config(state="normal")
-    
-    # Borrar solo los números de línea previos que ya no sean necesarios
-    line_numbers_panel.delete("1.0", "end-1c")
-    
-    # Insertar los nuevos números de línea
-    for i, line in enumerate(lines, 1): 
-        line_numbers_panel.insert("end", f"{i}\n")
-    
-    # Restaurar el estado de solo lectura
-    line_numbers_panel.config(state="disabled")
-    
-    # Restaurar la posición del desplazamiento
-    line_numbers_panel.yview_moveto(text_area.yview()[0])
-
-# Vínculo para actualizar los números de línea cuando se modifique el texto
-def update_status(event=None):
-    update_line_numbers()
-    update_line_column()
-
-# Vínculos para actualizar números de línea y línea/columna
-text_area.bind("<KeyRelease>", update_status)
-text_area.bind("<ButtonRelease-1>", update_status)
-
-# Vínculo para sincronizar los desplazamientos
-text_area.bind("<MouseWheel>", sync_scroll)
-text_area.bind("<Up>", sync_scroll)
-text_area.bind("<Down>", sync_scroll)
-# Actualización de línea y columna
-
-
-# Inicializar números de línea al cargar el editor
-update_line_numbers()
-
-text_panel.pack(fill=tk.BOTH, expand=True)
+text_panel.pack(fill=tk.BOTH)
 main_panel.add(text_panel, stretch="always")
 
 # Paneles inferiores (que no deben tapar el texto)
@@ -213,7 +149,9 @@ line_label.pack(side=tk.LEFT, padx=5, pady=5)
 col_label = ttk.Label(status_panel, text="Columna: 1", width=15, anchor="w")
 col_label.pack(side=tk.LEFT, padx=5, pady=5)
 
-
+# Actualización de línea y columna
+text_area.bind("<KeyRelease>", update_line_column)
+text_area.bind("<ButtonRelease-1>", update_line_column)
 
 # Atajos de teclado
 root.bind("<Control-s>", save_file)
