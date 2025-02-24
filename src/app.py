@@ -41,12 +41,21 @@ def save_file_as():
         with open(ruta, "w", encoding="utf-8") as archivo:
             archivo.write(text_area.get("1.0", tk.END))
             
+def close_archive():
+    global arch_abierto
+    arch_abierto = None
+    text_area.delete("1.0", tk.END)
+    text_area.config(state=tk.DISABLED)
+    update_line_numbers()
+            
 
 def update_line_column():
-    # Obtén el índice del cursor y extrae línea y columna
-    line, col = text_area.index(tk.INSERT).split(".")
+    index = text_area.index(tk.INSERT)
+    line = index.split(".")[0]
+    column = int(index.split(".")[1]) + 1
     line_label.config(text=f"Línea: {line}")
-    col_label.config(text=f"Columna: {col}")
+    col_label.config(text=f"Columna: {column}")
+    
 
 def close_app():
     root.quit()
@@ -65,6 +74,7 @@ file_menu = tk.Menu(menubar, tearoff=0)
 file_menu.add_command(label="Nuevo Archivo", command=new_file)
 file_menu.add_command(label="Abrir Archivo", command=open_file)
 file_menu.add_command(label="Guardar Archivo", command=save_file)
+file_menu.add_command(label="Guardar Archivo Como...", command=save_file_as)
 file_menu.add_separator()
 file_menu.add_command(label="Cerrar", command=close_app)
 menubar.add_cascade(label="Archivo", menu=file_menu)
@@ -84,7 +94,7 @@ buttonsIcons = [
     ("Nuevo", new_file),
     ("Abrir", open_file),
     ("Guardar", save_file),
-    ("Cerrar", None),
+    ("Cerrar", close_archive),
     ("Compilar", None),
     ("Debuguear", None),
 ]
@@ -172,11 +182,7 @@ text_area.bind("<ButtonRelease-1>", update_status)
 text_area.bind("<MouseWheel>", sync_scroll)
 text_area.bind("<Up>", sync_scroll)
 text_area.bind("<Down>", sync_scroll)
-# Actualización de línea y columna
 
-
-# Inicializar números de línea al cargar el editor
-update_line_numbers()
 
 text_panel.pack(fill=tk.BOTH, expand=True)
 main_panel.add(text_panel, stretch="always")
