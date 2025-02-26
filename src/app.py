@@ -109,11 +109,10 @@ def opVentana(funcion, ventana):
     text_area.yview(tk.END)  # Desplazar al final automáticamente
 
 
-
 def close_window():
     ventana = tk.Toplevel(root)
     ventana.title("Mensaje")
-   
+
     # Tamaño de la ventana emergente
     ancho_ventana = 300
     alto_ventana = 150
@@ -174,6 +173,7 @@ root.title("Compilador")
 root.geometry("900x600")
 
 # Barra de menú
+# Menú de archivo
 menubar = tk.Menu(root)
 file_menu = tk.Menu(menubar, tearoff=0)
 file_menu.add_command(label="Nuevo Archivo", command=new_file)
@@ -183,6 +183,14 @@ file_menu.add_command(label="Guardar Archivo Como...", command=save_file_as)
 file_menu.add_separator()
 file_menu.add_command(label="Cerrar Archivo", command=close_window)
 menubar.add_cascade(label="Archivo", menu=file_menu)
+
+# Menu del compilador
+compile_menu = tk.Menu(menubar, tearoff=0)
+compile_menu.add_command(label="Lexico", command=None)
+compile_menu.add_command(label="Sintáctico", command=None)
+compile_menu.add_command(label="Semántico", command=None)
+menubar.add_cascade(label="Compilar", menu=compile_menu)
+
 root.config(menu=menubar)
 
 # Barra de herramientas
@@ -254,49 +262,49 @@ h_scrollbar = tk.Scrollbar(text_panel, orient="horizontal", command=text_area.xv
 text_area.config(wrap="none", xscrollcommand=h_scrollbar.set)
 
 
-# Función para sincronizar el desplazamiento
+# Función para sincronizar el desplazamiento vertical
 def sync_scroll(event):
     line_numbers_panel.yview_moveto(text_area.yview()[0])
+
+
+# Función para sincronizar el desplazamiento horizontal
+def sync_h_scroll(event):
     text_area.xview_moveto(h_scrollbar.get()[0])
 
 
 def update_line_numbers(event=None):
-
-    # Obtén el número de líneas en el área de texto
-    lines = text_area.get("1.0", "end").splitlines()
-
-    # Hacer que la edición de números de línea sea posible
+    # Actualizar la numeración de líneas
     line_numbers_panel.config(state="normal")
+    line_numbers_panel.delete(1.0, tk.END)
 
-    # Borrar solo los números de línea previos que ya no sean necesarios
-    line_numbers_panel.delete("1.0", "end-1c")
+    # Obtener el número total de líneas
+    line_count = int(text_area.index("end-1c").split(".")[0])
 
-    # Insertar los nuevos números de línea
-    for i, line in enumerate(lines, 1):
-        line_numbers_panel.insert("end", f"{i}\n")
+    # Generar la numeración de líneas
+    line_numbers_string = "\n".join(str(i) for i in range(1, line_count + 1))
 
-    # Restaurar el estado de solo lectura
+    # Insertar la numeración en el widget de líneas
+    line_numbers_panel.insert(1.0, line_numbers_string)
     line_numbers_panel.config(state="disabled")
-
-    # Restaurar la posición del desplazamiento
-    line_numbers_panel.yview_moveto(text_area.yview()[0])
-
 
 # Vínculo para actualizar los números de línea cuando se modifique el texto
 def update_status(event=None):
-    update_line_numbers()
+    update_line_numbers(event)
     update_line_column()
+    sync_scroll(event)
 
 
 # Vínculos para actualizar números de línea y línea/columna
 text_area.bind("<KeyRelease>", update_status)
 text_area.bind("<ButtonRelease-1>", update_status)
+text_area.bind("<MouseWheel>", update_status)
+text_area.bind("<Configure>", update_status)
 
 # Vínculo para sincronizar los desplazamientos
-text_area.bind("<MouseWheel>", sync_scroll)
-text_area.bind("<Up>", sync_scroll)
-text_area.bind("<Down>", sync_scroll)
-
+text_area.bind("<MouseWheel>", update_status)
+text_area.bind("<Up>", update_status)
+text_area.bind("<Down>", update_status)
+text_area.bind("<Shift-MouseWheel>", sync_h_scroll)
 
 text_panel.pack(fill=tk.BOTH, expand=True)
 main_panel.add(text_panel, stretch="always")
