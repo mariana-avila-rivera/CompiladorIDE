@@ -6,10 +6,13 @@ arch_abierto = None
 
 def new_file():
     global arch_abierto
-    arch_abierto = None
-    text_area.delete("1.0", tk.END)
-    text_area.config(state=tk.NORMAL)
-    update_line_numbers()
+    if arch_abierto or text_area.get("1.0", tk.END).strip():
+        arch_abierto = None
+        open_window()
+    else:
+        text_area.delete("1.0", tk.END)
+        text_area.config(state=tk.NORMAL)
+        update_line_numbers()
     text_area.yview(tk.END)  # Desplazar automáticamente al final
 
 
@@ -55,6 +58,53 @@ def close_file():
     arch_abierto = None
     text_area.delete("1.0", tk.END)
     update_line_numbers()
+
+
+def open_window(): # Para abrir un arch. Nuevo
+    ventana = tk.Toplevel(root)
+    ventana.title("Mensaje")
+   
+    # Tamaño de la ventana emergente
+    ancho_ventana = 300
+    alto_ventana = 150
+
+    # Obtener tamaño de la pantalla
+    ancho_pantalla = ventana.winfo_screenwidth()
+    alto_pantalla = ventana.winfo_screenheight()
+
+    # Calcular coordenadas para centrar
+    x = (ancho_pantalla - ancho_ventana) // 2
+    y = (alto_pantalla - alto_ventana) // 2
+
+    # Establecer geometría de la ventana emergente
+    ventana.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
+
+    etiqueta = tk.Label(ventana, text="¿Salir sin guardar?",
+                        font=("Arial", 12))
+    etiqueta.pack(pady=20)
+
+    botones_frame = tk.Frame(ventana)
+    botones_frame.pack()
+
+    btnG = tk.Button(botones_frame, text="Guardar",
+                     command=lambda: opVentana(save_file, ventana))
+    btnG.pack(side=tk.LEFT, padx=10)
+
+    btnNG = tk.Button(botones_frame, text="No Guardar",
+                      command=lambda: opVentana(close_file, ventana))
+    btnNG.pack(side=tk.LEFT, padx=10)
+
+
+def opVentana(funcion, ventana):
+    ventana.destroy()  # Cerrar la ventana emergente
+    funcion()  # Guardar o cerrar el archivo
+    global arch_abierto
+    arch_abierto = None  # Reiniciar la variable global
+    text_area.delete("1.0", tk.END)  # Limpiar el área de texto
+    text_area.config(state=tk.NORMAL)  # Asegurar que es editable
+    update_line_numbers()  # Actualizar números de línea
+    text_area.yview(tk.END)  # Desplazar al final automáticamente
+
 
 
 def close_window():
