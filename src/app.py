@@ -18,10 +18,12 @@ def new_file():
 
 def open_file():
     file_path = filedialog.askopenfilename()
+    global arch_abierto
     if file_path:
         try:
             with open(file_path, "r", encoding="utf-8") as archivo:
                 contenido = archivo.read()
+                arch_abierto = file_path
         except UnicodeDecodeError:
             with open(file_path, "r", encoding="latin-1") as archivo:
                 contenido = archivo.read()
@@ -30,14 +32,15 @@ def open_file():
     update_line_numbers()
 
 
-def save_file():
+def save_file(event=None):
     global arch_abierto
     if not arch_abierto:
         save_file_as()
-        if not arch_abierto:
-            return  # Si sigue siendo None, salir de la función
-    with open(arch_abierto, "w", encoding="utf-8") as archivo:
-        archivo.write(text_area.get("1.0", tk.END))
+    else:
+        with open(arch_abierto, "w", encoding="utf-8") as archivo:
+            archivo.write(text_area.get("1.0", tk.END).strip())
+            # Guardar el contenido limpiando espacios extra
+
 
 
 def save_file_as():
@@ -244,15 +247,20 @@ text_area.pack(expand=True, fill=tk.BOTH, side=tk.LEFT)
 scrollbar.config(command=lambda *args: [line_numbers_panel.yview(*args), text_area.yview(*args)])
 scrollbar.pack(side=tk.LEFT, fill=tk.Y)
 
+# Agregar Scrollbar horizontal
+h_scrollbar = tk.Scrollbar(text_panel, orient="horizontal", command=text_area.xview)
+
+# Configurar el Text para permitir desplazamiento horizontal
+text_area.config(wrap="none", xscrollcommand=h_scrollbar.set)
+
 
 # Función para sincronizar el desplazamiento
 def sync_scroll(event):
     line_numbers_panel.yview_moveto(text_area.yview()[0])
+    text_area.xview_moveto(h_scrollbar.get()[0])
 
 
 def update_line_numbers(event=None):
-    # Guardar la posición actual del desplazamiento vertical
-    current_yview = text_area.yview()
 
     # Obtén el número de líneas en el área de texto
     lines = text_area.get("1.0", "end").splitlines()
