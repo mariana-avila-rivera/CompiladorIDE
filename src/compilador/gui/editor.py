@@ -7,6 +7,9 @@ class CodeEditor:
         self.parent = parent
         self.text_area = None
         self.line_numbers = None
+        self.line_label = None
+        self.col_label = None
+        self.status_bar = None
         self.create_widgets()
         self.setup_bindings()
 
@@ -51,13 +54,29 @@ class CodeEditor:
                                      command=self.text_area.xview)
 
         self.editor_frame.pack(fill=tk.BOTH, expand=True)
-
         self.text_area.config(wrap="none", xscrollcommand=self.scroll_x.set)
+
+        # Agregando Labels para mostrar Linea: Columna
+        # Crear un frame contenedor para la barra de estado
+        self.status_bar = tk.Frame(self.parent, height=20, bg="#e0e0e0")
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        # Crear el label de línea
+        self.line_label = tk.Label(self.status_bar, text="Línea: 1", anchor="w", bg="#e0e0e0")
+        self.line_label.pack(side=tk.LEFT, padx=10)
+
+        # Crear el label de columna
+        self.col_label = tk.Label(self.status_bar, text="Columna: 1", anchor="w", bg="#e0e0e0")
+        self.col_label.pack(side=tk.LEFT, padx=10)
 
     def setup_bindings(self):
         self.text_area.bind("<KeyRelease>", self.update_line_numbers)
         self.text_area.bind("<ButtonRelease-1>", self.update_line_numbers)
         self.text_area.bind("<MouseWheel>", self.update_line_numbers)
+        self.text_area.bind("<Configure>", self.update_line_numbers)
+        self.text_area.bind("<Up>", self.update_line_numbers)
+        self.text_area.bind("<Down>", self.update_line_numbers)
+        self.text_area.bind("<Shift-MouseWheel>", self.sync_h_scroll)
 
     def update_line_numbers(self, event=None):
         # Implementación simplificada
@@ -72,9 +91,19 @@ class CodeEditor:
         # sincronizar el desplazamiento vertical
         self.line_numbers.yview_moveto(self.text_area.yview()[0])
 
+        # Actualizar etiquetas de línea y columna
+        self.update_line_column()
+
     # Función para sincronizar el desplazamiento horizontal
     def sync_h_scroll(self):
         self.text_area.xview_moveto(self.scroll_x.get()[0])
+
+    def update_line_column(self):
+        index = self.text_area.index(tk.INSERT)
+        line = index.split(".")[0]
+        column = int(index.split(".")[1]) + 1
+        self.line_label.config(text=f"Línea: {line}")
+        self.col_label.config(text=f"Columna: {column}")
 
     def get_text(self):
         return self.text_area.get("1.0", tk.END)
