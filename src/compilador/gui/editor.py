@@ -62,11 +62,13 @@ class CodeEditor:
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
         # Crear el label de línea
-        self.line_label = tk.Label(self.status_bar, text="Línea: 1", anchor="w", bg="#e0e0e0")
+        self.line_label = tk.Label(self.status_bar,
+                                   text="Línea: 1", anchor="w", bg="#e0e0e0")
         self.line_label.pack(side=tk.LEFT, padx=10)
 
         # Crear el label de columna
-        self.col_label = tk.Label(self.status_bar, text="Columna: 1", anchor="w", bg="#e0e0e0")
+        self.col_label = tk.Label(self.status_bar,
+                                  text="Columna: 1", anchor="w", bg="#e0e0e0")
         self.col_label.pack(side=tk.LEFT, padx=10)
 
     def setup_bindings(self):

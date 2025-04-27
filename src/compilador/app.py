@@ -11,12 +11,11 @@ class CompilerApp:
         self.root = tk.Tk()
         self.root.title("Compilador")
         self.root.geometry("900x600")
-
-        self.file_manager = FileManager()
         self.setup_ui()
 
     def setup_ui(self):
         # Configurar la interfaz
+        self.file_manager = FileManager(self.root)
         self.menu = MenuBar(self.root, self.file_manager)
         self.toolbar = Toolbar(self.root, self.file_manager)
         self.editor = CodeEditor(self.root)

@@ -63,10 +63,10 @@ def close_file():
     update_line_numbers()
 
 
-def open_window(): # Para abrir un arch. Nuevo
+def open_window():  # Para abrir un arch. Nuevo
     ventana = tk.Toplevel(root)
     ventana.title("Mensaje")
-   
+
     # Tamaño de la ventana emergente
     ancho_ventana = 300
     alto_ventana = 150
