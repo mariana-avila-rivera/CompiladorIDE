@@ -1,133 +1,139 @@
-import tkinter as tk
-
-
-def es_palabra_valida(text_area, start_idx, end_idx, token_type):
-    antes = text_area.get(f"{start_idx} -1c")
-    despues = text_area.get(end_idx)
-
-    # Los números siempre son válidos (no dependen de separadores)
-    if token_type == "numero":
-        return True
-
-    # Los comentarios siempre son válidos (no dependen de separadores)
-    elif token_type == "comentario":
-        return True
-
-    # Los operadores aritméticos y relacionales siempre deben ser válidos
-    elif token_type in ["aritmetico", "relacional", "logico", "simbolo", "asignacion"]:
-        return True
-
-    # Para otros tokens, verificamos los separadores
-    separadores = " \n\t.:,()[]{}+-*/=<>!\"'"
-    return (antes in separadores or start_idx == "1.0") and (despues in separadores or despues == '')
-
-
-def check_nums(text_area, pos_ini):
-    # Configurar tag (hazlo una vez al inicio del programa)
-    text_area.tag_config("number_tag", foreground="#0022FF")
-    
-    pos = pos_ini
-    start = None
-    tiene_punto = False
-    while True:
-        char = text_area.get(pos)  # Obtener carácter actual
-        if char == "":  # Fin del texto
-            if start is not None:
-                text_area.tag_add("number_tag", start, pos)
-            break
-        
-        # Lógica de validación
-        if char in '+-' and pos == pos_ini:  # Signo al inicio
-            start = pos
-            pos = f"{pos}+1c"
-        elif char.isdigit():
-            if start is None:
-                start = pos
-            pos = f"{pos}+1c"
-        elif char == '.' and not tiene_punto:
-            tiene_punto = True
-            if start is None:
-                start = pos
-            pos = f"{pos}+1c"
-        else:  # Carácter no válido
-            if start is not None:
-                text_area.tag_add("number_tag", start, pos)  # Pintar número
-                es_palabra_valida(text_area, start, pos, "numero")
-            break
-
-
-
 def resaltar_palabras(text_area):
-    # Limpiar todos los tags
+    # Limpiar todos los tags existentes
     for tag in text_area.tag_names():
         text_area.tag_remove(tag, "1.0", "end")
-
-    # Crear tags para cada color y asociarlos con las palabras correspondientes
-    color_palabras = {
-        "#0022FF": {"0", "1", "2", "3", "4",
-                    "5", "6", "7", "8", "9"},  # Números enteros
-        "#800080": {"if", "then", "else", "end", "do", "while", "switch", "case", "int", "float", "main", "cin", "cout"},  # Palabras reservadas
-        "#1D472B": {"//", "/*", "*/"},  # Comentarios
-        "#958E12": {"+", "-", "*", "/", "%", "^", "++", "--"},  # Operadores aritméticos
-        "#763A58": {"==", "!=", "<", ">", "<=", ">=", "&&", "||", "and", "or", "not", "AND", "OR", "NOT"},  # Operadores lógicos y relacionales
-        "#FF00FF": {"(", ")", "{", "}", "[", "]", ";", ","},  # Símbolos
-        "#1FBB9A": {"=", "+=", "-=", "*=", "/=", "%=", "^="}  # Asignación
-    }
-
-    # Configuración de los colores
-    for color, palabras in color_palabras.items():
-        text_area.tag_configure(color, foreground=color)
-
-        for palabra in palabras:
-            start = "1.0"
-            while True:
-                start = text_area.search(palabra, start,
-                                         stopindex="end", nocase=False)
-                if not start:
-                    break
-                end = f"{start}+{len(palabra)}c"
-
-                # Ahora verificamos correctamente para cada tipo de token
-                # if palabra in color_palabras["#0022FF"]:  # Números
-                #     # Verificamos si es un número entero con o sin signo
-                #     if es_palabra_valida(text_area, start, end, "numero"):
-                #         text_area.tag_add(color, start, end)
-                if any(caracter in "0123456789" for caracter in palabra):
-                    # Obtiene la posición del primer carácter numérico
-                    end = f"{start}+{len(palabra)}c"
-                    check_nums(text_area, start)
-
-                elif palabra in color_palabras["#800080"]:  # Palabras reservadas
-                    if es_palabra_valida(text_area, start, end, "palabra_reservada"):
-                        text_area.tag_add(color, start, end)
+    
+    # Configurar todos los tags de colores
+    text_area.tag_config("comment_tag", foreground="#1F642B")    # Comentarios
+    text_area.tag_config("number_tag", foreground="#0022FF")     # Números
+    text_area.tag_config("keyword_tag", foreground="#800080")    # Palabras reservadas
+    text_area.tag_config("arithmetic_tag", foreground="#958E12") # Operadores aritméticos
+    text_area.tag_config("logical_tag", foreground="#763A58")    # Operadores lógicos
+    text_area.tag_config("symbol_tag", foreground="#FF00FF")     # Símbolos
+    text_area.tag_config("assign_tag", foreground="#1FBB9A")     # Asignación
+    
+    # Palabras clave por categoría
+    keywords = {"if", "then", "else", "end", "do", "while", "switch", "case", "int", "float", "main", "cin", "cout"}
+    
+    # Posición global de análisis
+    pos = "1.0"
+    last_pos = text_area.index("end-1c")
+    
+    # Analizar todo el texto caracter por caracter
+    while text_area.compare(pos, "<", "end"):
+        # Obtener el carácter actual y el siguiente
+        char = text_area.get(pos)
+        next_pos = text_area.index(f"{pos}+1c")
+        next_char = text_area.get(next_pos) if text_area.compare(next_pos, "<", "end") else ""
+        
+        # Verificar comentarios primero (mayor prioridad)
+        if char == "/" and next_char == "/":  # Comentario de línea
+            line_start = pos.split('.')[0]
+            end_pos = text_area.index(f"{line_start}.end")
+            text_area.tag_add("comment_tag", pos, end_pos)
+            pos = end_pos  # Saltar al final de la línea
+            continue
+            
+        elif char == "/" and next_char == "*":  # Comentario de bloque
+            start_pos = pos
+            pos = text_area.index(f"{pos}+2c")  # Saltar los primeros dos caracteres "/*"
+            
+            # Buscar el cierre "*/"
+            found_end = False
+            while not found_end and text_area.compare(pos, "<", "end"):
+                curr_char = text_area.get(pos)
+                next_pos = text_area.index(f"{pos}+1c")
+                next_char = text_area.get(next_pos) if text_area.compare(next_pos, "<", "end") else ""
                 
-                elif palabra in color_palabras["#958E12"]:  # Operadores aritméticos
-                    if es_palabra_valida(text_area, start, end, "aritmetico"):
-                        text_area.tag_add(color, start, end)
-
-                elif palabra in color_palabras["#1FBB9A"]:  # Asignacion
-                    if es_palabra_valida(text_area, start, end, "asignacion"):
-                        text_area.tag_add(color, start, end)
-
-                elif palabra in color_palabras["#763A58"]:  # Operadores lógicos
-                    if es_palabra_valida(text_area, start, end, "logico"):
-                        text_area.tag_add(color, start, end)
-
-                elif palabra in color_palabras["#FF00FF"]:  # Símbolos
-                    if es_palabra_valida(text_area, start, end, "simbolo"):
-                        text_area.tag_add(color, start, end)
-
-                elif palabra in color_palabras["#1D472B"]:  # Comentarios
-                    if palabra == "//":  # Comentarios de una línea
-                        end_line = text_area.search("\n", end, stopindex="end")
-                        if not end_line:
-                            end_line = "end"
-                        text_area.tag_add(color, start, end_line)
-                    elif palabra == "/*":  # Comentarios multilínea
-                        end_comment = text_area.search("*/", end, stopindex="end")
-                        if end_comment:
-                            text_area.tag_add(color, start, end_comment + "+2c")  # +2 para incluir el */
-                        else:
-                            text_area.tag_add(color, start, "end")  # Si no cierra, se resalta hasta el final
-
-                start = end  # Continuar buscando la siguiente instancia
+                if curr_char == "*" and next_char == "/":
+                    end_pos = text_area.index(f"{pos}+2c")  # Incluir "*/"
+                    text_area.tag_add("comment_tag", start_pos, end_pos)
+                    pos = end_pos
+                    found_end = True
+                else:
+                    pos = text_area.index(f"{pos}+1c")
+            
+            if not found_end:  # Si no se encontró cierre, marcar hasta el final
+                text_area.tag_add("comment_tag", start_pos, "end")
+                pos = text_area.index("end")
+            continue
+        
+        # Verificar números
+        if char.isdigit() or (char in '+-' and next_char.isdigit()):
+            start_pos = pos
+            if char in '+-':
+                pos = text_area.index(f"{pos}+1c")
+                
+            tiene_punto = False
+            while text_area.compare(pos, "<", "end"):
+                current_char = text_area.get(pos)
+                if current_char.isdigit():
+                    pos = text_area.index(f"{pos}+1c")
+                elif current_char == '.' and not tiene_punto:
+                    tiene_punto = True
+                    pos = text_area.index(f"{pos}+1c")
+                else:
+                    break
+            
+            text_area.tag_add("number_tag", start_pos, pos)
+            continue
+        
+        # Verificar palabras reservadas
+        if char.isalpha():
+            start_pos = pos
+            word = ""
+            
+            # Extraer la palabra completa
+            while text_area.compare(pos, "<", "end"):
+                current_char = text_area.get(pos)
+                if current_char.isalnum() or current_char == '_':
+                    word += current_char
+                    pos = text_area.index(f"{pos}+1c")
+                else:
+                    break
+            
+            # Verificar si es una palabra clave
+            if word in keywords:
+                text_area.tag_add("keyword_tag", start_pos, pos)
+                continue
+        
+        # Verificar operadores aritméticos
+        if char in {"+", "-", "*", "/", "%", "^", "++", "--"}:
+            start_pos = pos
+            if char in "+-" and next_char == char:  # ++, --
+                text_area.tag_add("arithmetic_tag", pos, text_area.index(f"{pos}+2c"))
+                pos = text_area.index(f"{pos}+2c")
+            else:
+                text_area.tag_add("arithmetic_tag", pos, text_area.index(f"{pos}+1c"))
+                pos = text_area.index(f"{pos}+1c")
+            continue
+        
+        # Verificar operadores lógicos y relacionales
+        if char in  {"==", "!=", "<", ">", "<=", ">=", "&&", "||", "and", "or", "not", "AND", "OR", "NOT"}:
+            start_pos = pos
+            if next_char in "=&|":  # ==, !=, <=, >=, &&, ||
+                text_area.tag_add("logical_tag", pos, text_area.index(f"{pos}+2c"))
+                pos = text_area.index(f"{pos}+2c")
+            else:
+                text_area.tag_add("logical_tag", pos, text_area.index(f"{pos}+1c"))
+                pos = text_area.index(f"{pos}+1c")
+            continue
+        
+        # Verificar operadores de asignación
+        if (char == "=" and next_char != "=" ):
+            text_area.tag_add("assign_tag", pos, text_area.index(f"{pos}+1c"))
+            pos = text_area.index(f"{pos}+1c")
+            continue
+        elif char in "+-*/%^" and next_char == "=":
+            text_area.tag_add("assign_tag", pos, text_area.index(f"{pos}+2c"))
+            pos = text_area.index(f"{pos}+2c")
+            continue
+            
+        # Verificar símbolos
+        if char in {"(", ")", "{", "}", "[", "]", ";", ","}:
+            text_area.tag_add("symbol_tag", pos, text_area.index(f"{pos}+1c"))
+            pos = text_area.index(f"{pos}+1c")
+            continue
+            
+        # Avanzar si no se aplica ninguna regla
+        pos = text_area.index(f"{pos}+1c")

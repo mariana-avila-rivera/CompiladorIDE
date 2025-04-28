@@ -9,29 +9,30 @@ class BottomPanels:
 
     def create_panels(self):
         # Panel principal
-        self.main_panel = tk.PanedWindow(self.parent, orient=tk.HORIZONTAL)
+        self.main_panel = tk.PanedWindow(self.parent, orient=tk.HORIZONTAL) # Usar self.parent
+        self.main_panel.pack(fill=tk.BOTH, expand=True)
 
         # Panel izquierdo (Errores)
-        self.left_notebook = ttk.Notebook(self.main_panel)
+        self.left_notebook = ttk.Notebook(self.main_panel) # Usar self.main_panel (el PanedWindow interno)
         self.add_tabs(self.left_notebook,
-                      ["Errores Léxicos",
-                       "Errores Sintácticos",
-                       "Errores Semánticos",
-                       "Resultados"])
+                         ["Errores Léxicos",
+                          "Errores Sintácticos",
+                          "Errores Semánticos",
+                          "Resultados"])
 
         # Panel derecho (Análisis)
-        self.right_notebook = ttk.Notebook(self.main_panel)
+        self.right_notebook = ttk.Notebook(self.main_panel) # Usar self.main_panel
         self.add_tabs(self.right_notebook,
-                      ["Léxico",
-                       "Sintáctico",
-                       "Semántico",
-                       "Hash Table",
-                       "Código Intermedio"])
+                          ["Léxico",
+                           "Sintáctico",
+                           "Semántico",
+                           "Hash Table",
+                           "Código Intermedio"])
 
         # Añadir al panel principal
         self.main_panel.add(self.left_notebook)
         self.main_panel.add(self.right_notebook)
-        self.main_panel.pack(fill=tk.BOTH, expand=True)
+        # self.main_panel.pack(fill=tk.BOTH, expand=True) # Ya se empaqueta al crearse
 
     def add_tabs(self, notebook, tab_names):
         for name in tab_names:

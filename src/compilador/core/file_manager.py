@@ -20,7 +20,7 @@ class FileManager:
         else:
             self.editor.text_area.delete("1.0", tk.END)
             self.editor.text_area.config(state=tk.NORMAL)
-            self.editor.update_line_numbers()
+            self.editor.update_after_realize()
         self.editor.text_area.yview(tk.END)  # Desplazar al final
 
     def open_file(self):
@@ -40,7 +40,7 @@ class FileManager:
                         contenido = archivo.read()
                 self.editor.text_area.delete("1.0", tk.END)
                 self.editor.text_area.insert("1.0", contenido)
-        self.editor.update_line_numbers()  # Actualizar nums de línea
+        self.editor.update_after_realize()  # Actualizar nums de línea
 
     def save_file(self):
         if not self.arch_abierto:
@@ -49,7 +49,7 @@ class FileManager:
             with open(self.arch_abierto, "w",
                       encoding="utf-8") as archivo:
                 archivo.write(self.editor.text_area.get("1.0", tk.END).strip())
-        self.editor.update_line_numbers()  # Actualizar los números de línea
+        self.editor.update_after_realize()  # Actualizar los números de línea
 
     def save_file_as(self):
         ruta = filedialog.asksaveasfilename(
@@ -65,7 +65,7 @@ class FileManager:
     def close_file(self):
         self.arch_abierto = None
         self.editor.text_area.delete("1.0", tk.END)
-        self.editor.update_line_numbers()
+        self.editor.update_after_realize()
 
 # Función para mostrar un mensaje de advertencia al cerrar la ventana
     def close_window(self, tipo=None):
@@ -132,3 +132,4 @@ class FileManager:
         self.editor.text_area.config(state=tk.NORMAL)  # Asegura ser editable
         self.editor.text_area.yview(tk.END)  # Desplazar al final
         self.open_file()
+
