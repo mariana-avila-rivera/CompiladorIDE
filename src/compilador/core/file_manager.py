@@ -132,4 +132,3 @@ class FileManager:
         self.editor.text_area.config(state=tk.NORMAL)  # Asegura ser editable
         self.editor.text_area.yview(tk.END)  # Desplazar al final
         self.open_file()
-

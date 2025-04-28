@@ -1,6 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
-
+from analizadores.lexico import resaltar_palabras
 
 class CodeEditor:
     def __init__(self, parent):
@@ -95,6 +94,8 @@ class CodeEditor:
 
         # Actualizar etiquetas de línea y columna
         self.update_line_column()
+        # Llamar al analizador LEXICO
+        resaltar_palabras(self.text_area)
 
     # Función para sincronizar el desplazamiento horizontal
     def sync_h_scroll(self):
