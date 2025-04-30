@@ -5,6 +5,7 @@ class CodeEditor:
     def __init__(self, parent):
         self.parent = parent
         self.text_area = None
+        self.previous_text = self.text_area.get("1.0", "end-1c") if self.text_area else None
         self.line_numbers = None
         self.line_label = None
         self.col_label = None
@@ -73,12 +74,14 @@ class CodeEditor:
     def update_after_realize(self, event=None):
         # Actualiza el área de texto después de realizar cambios
         self.update_line_numbers(None)
-        resaltar_palabras(self.text_area)
+        current_text = self.text_area.get("1.0", "end-1c")
+        if current_text != self.previous_text:
+            resaltar_palabras(self.text_area)
+            self.previous_text = current_text
+
 
     def setup_bindings(self):
-        self.text_area.bind("<KeyRelease>", self.update_line_numbers)
-        #evento cuando escribe algo una letra, pero no teclas especiales como Ctrl, Shift, etc.
-        self.text_area.bind("<KeyPress>", self.update_after_realize)
+        self.text_area.bind("<KeyRelease>", self.update_after_realize)
         self.text_area.bind("<ButtonRelease-1>", self.update_line_numbers)
         self.text_area.bind("<MouseWheel>", self.update_line_numbers)
         self.text_area.bind("<Configure>", self.update_line_numbers)
