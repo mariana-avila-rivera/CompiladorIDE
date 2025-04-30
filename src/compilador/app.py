@@ -18,9 +18,7 @@ class CompilerApp:
         # Configurar la interfaz
         self.file_manager = FileManager(self.root)
         self.menu = MenuBar(self.root, self.file_manager)
-        self.toolbar = Toolbar(self.root, self.file_manager)
-        self.toolbar.toolbar_frame.pack(side=tk.TOP, fill=tk.X) # Empaqueta el frame de la toolbar
-
+        
         # Panel principal para la división vertical (ahora hijo de root)
         self.main_panel = tk.PanedWindow(self.root, orient=tk.VERTICAL)
         self.main_panel.pack(fill=tk.BOTH, expand=True)
@@ -32,6 +30,10 @@ class CompilerApp:
         # Paneles inferiores (ahora directamente en main_panel)
         self.panels = BottomPanels(self.main_panel)
         self.main_panel.add(self.panels.main_panel, stretch="always") # Asegúrate de usar panels.main_panel
+
+        # Crear la toolbar pasándole las referencias necesarias
+        self.toolbar = Toolbar(self.root, self.file_manager, self.editor, self.panels)
+        self.toolbar.toolbar_frame.pack(side=tk.TOP, fill=tk.X) # Empaqueta el frame de la toolbar
 
         # Configurar eventos
         self.file_manager.set_editor(self.editor)

@@ -2,12 +2,15 @@
 import tkinter as tk
 import os
 from tkinter import ttk
+from analizadores.lexico import resaltar_palabras, tokenizar_codigo
 
 
 class Toolbar:
-    def __init__(self, root, file_manager):
+    def __init__(self, root, file_manager, editor=None, bottom_panels=None):
         self.root = root
         self.file_manager = file_manager
+        self.editor = editor
+        self.bottom_panels = bottom_panels
         self.toolbar_frame = None  # Añade un atributo para el frame de la toolbar
         self.create_toolbar()
 
@@ -20,6 +23,48 @@ class Toolbar:
             print(f"Error cargando el icono {image_path}: {e}")
             print("Directorio actual:", os.getcwd())
             return None
+    
+    def analizar_lexico(self):
+        """Analiza el código usando el analizador léxico y muestra los errores en la pestaña correspondiente"""
+        if not self.editor or not self.bottom_panels:
+            return
+        
+        # Obtener el texto del editor
+        text_area = self.editor.text_area
+        
+        # Ejecutar el analizador léxico y recoger errores
+        errores = resaltar_palabras(text_area)
+        
+        # Mostrar errores en la pestaña "Errores Léxicos"
+        if self.bottom_panels:
+            if errores:
+                errores_text = "ERRORES LÉXICOS ENCONTRADOS:\n\n" + "\n".join(errores)
+            else:
+                errores_text = "No se encontraron errores léxicos"
+            
+            # Añadir texto a la pestaña
+            self.bottom_panels.add_text_to_tab("Errores Léxicos", errores_text, clear=True)
+            
+            # Mostrar la pestaña de errores léxicos
+            left_notebook = self.bottom_panels.left_notebook
+            tabs = left_notebook.tabs()
+            
+            # Buscar el índice de la pestaña "Errores Léxicos"
+            for i, tab_id in enumerate(tabs):
+                if left_notebook.tab(tab_id, "text") == "Errores Léxicos":
+                    left_notebook.select(i)
+                    break
+                    
+            # Obtener los tokens del código
+            tokens = tokenizar_codigo(text_area)
+            
+            # Preparar el texto para mostrar en la pestaña "Léxico"
+            tokens_text = "TOKENIZADO:\n\n"
+            for tipo, valor, linea, columna in tokens:
+                tokens_text += f"{tipo} (Línea: {linea}, Columna: {columna}): '{valor}'\n"
+            
+            # Añadir texto a la pestaña Léxico
+            self.bottom_panels.add_text_to_tab("Léxico", tokens_text, clear=True)
 
     def create_toolbar(self):
         self.toolbar_frame = tk.Frame(self.root) # Asigna el Frame a self.toolbar_frame
@@ -42,7 +87,7 @@ class Toolbar:
             ("Debuguear", None),
         ]
         buttons = [
-            ("Lexico", None),
+            ("Lexico", self.analizar_lexico),
             ("Sintáctico", None),
             ("Semántico", None),
         ]

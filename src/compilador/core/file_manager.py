@@ -69,7 +69,6 @@ class FileManager:
 
 # Función para mostrar un mensaje de advertencia al cerrar la ventana
     def close_window(self, tipo=None):
-        print("Cerrando ventana...")
         # tipo= open/close
         ventana = tk.Toplevel(self.parent)
         ventana.title("Mensaje")
@@ -118,13 +117,11 @@ class FileManager:
         btnNG.pack(side=tk.LEFT, padx=10)
 
     def acVentana(self, funcion, ventana):
-        print("Guardando archivo por CLOSE...")
         ventana.destroy()  # Cerrar la ventana emergente
         funcion()  # Ejecutar la función correspondiente
         self.close_file()
 
     def opVentana(self, funcion, ventana):
-        print("Guardando archivo por OPEN...")
         ventana.destroy()  # Cerrar la ventana emergente
         funcion()  # Guardar o cerrar el archivo
         self.arch_abierto = None  # Reiniciar la variable global

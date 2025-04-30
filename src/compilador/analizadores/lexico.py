@@ -3,154 +3,162 @@ def resaltar_palabras(text_area):
     for tag in text_area.tag_names():
         text_area.tag_remove(tag, "1.0", "end")
 
-    # Configurar todos los tags de colores
-    text_area.tag_config("comment_tag",
-                         foreground="#1F642B")  # Comentarios
-    text_area.tag_config("number_tag",
-                         foreground="#0022FF")  # Números
-    text_area.tag_config("keyword_tag",
-                         foreground="#800080")  # Palabras reservadas
-    text_area.tag_config("arithmetic_tag",
-                         foreground="#958E12")  # Operadores aritméticos
-    text_area.tag_config("logical_tag",
-                         foreground="#763A58")  # Op. lógicos y relacionales
-    text_area.tag_config("symbol_tag",
-                         foreground="#FF00FF")  # Símbolos
-    text_area.tag_config("assign_tag",
-                         foreground="#1FBB9A")  # Asignación
+    # Configurar todos los tags de colores (sin cambios)
+    text_area.tag_config("comment_tag", foreground="#1F642B")
+    text_area.tag_config("number_tag", foreground="#0022FF")
+    text_area.tag_config("keyword_tag", foreground="#800080")
+    text_area.tag_config("arithmetic_tag", foreground="#958E12")
+    text_area.tag_config("logical_tag", foreground="#763A58")
+    text_area.tag_config("symbol_tag", foreground="#FF00FF")
+    text_area.tag_config("assign_tag", foreground="#1FBB9A")
 
-    # Colecciones de tokens por categoría
-    keywords = {"if", "then", "else", "end", "do", "while",
-                "switch", "case", "int", "float", "real",
-                "main", "cin", "cout", "until"}
+    # Colecciones de tokens (sin cambios)
+    keywords = {"if", "then", "else", "end", "do", "while", "switch", "case", "int", "float", "real", "main", "cin", "cout", "until"}
     arithmetic_ops_single = {"*", "/", "%", "^"}
-    arithmetic_ops_plus_minus = {"+", "-"}  # Separamos + y -
+    arithmetic_ops_plus_minus = {"+", "-"}
     logical_words = {"and", "or", "not", "AND", "OR", "NOT"}
     assign_ops = {"=", "+=", "-=", "*=", "/=", "%=", "^="}
     symbols = {"(", ")", "{", "}", "[", "]", ";", ","}
+    relational_ops_single = {"<", ">"} # Añadimos < y > aquí
 
-    # Tratar el texto completo primero para comentarios
+    # Lista para almacenar los errores léxicos encontrados
+    errores_lexicos = []
+
+    # Tratar el texto completo primero para comentarios (sin cambios)
     marcar_comentarios_primero(text_area)
 
     # La posición de análisis comienza desde el principio
     pos = "1.0"
 
     while text_area.compare(pos, "<", "end"):
-        # Si estamos en un comentario, saltamos a la siguiente posición que no es comentario
-        if "comment_tag" in text_area.tag_names(pos):
-            # Encontrar el final del comentario
-            next_pos = pos
-            while text_area.compare(next_pos, "<", "end") and "comment_tag" in text_area.tag_names(next_pos):
-                next_pos = text_area.index(f"{next_pos}+1c")
-            pos = next_pos
-            continue
-
+        # Obtener la línea y columna actuales desde la posición del texto
+        # Formato de pos: "linea.columna"
+        pos_parts = pos.split(".")
+        fila = int(pos_parts[0])
+        columna = int(pos_parts[1]) + 1  # +1 porque la columna en el widget comienza en 0
+        
         char = text_area.get(pos)
-
-        # Si estamos en el final del texto, salimos
-        if not char:
-            break
 
         # Obtener el siguiente carácter si existe
         next_pos = text_area.index(f"{pos}+1c") if text_area.compare(pos, "<", "end-1c") else "end"
         next_char = text_area.get(next_pos) if text_area.compare(next_pos, "<", "end") else ""
 
-        # Verificar números (enteros y flotantes)
+        # Si estamos en un comentario, saltamos
+        if "comment_tag" in text_area.tag_names(pos):
+            pos = text_area.index(f"{pos}+1c")
+            continue
+
+        token_reconocido = False
+        avanzar = 1 # Cantidad de caracteres para avanzar por defecto
+
+        # Verificar números
         if char.isdigit() or (char in '+-' and next_char.isdigit() and
                                (pos == "1.0" or not text_area.get(f"{pos}-1c").isalnum())):
             start_pos = pos
-            pos = procesar_numero(text_area, pos)
+            pos, num_errors = procesar_numero(text_area, pos, fila, columna, errores_lexicos)
+            token_reconocido = True
             continue
 
-        # Verificar palabras reservadas y palabras lógicas
+        # Verificar palabras clave y lógicas
         if char.isalpha() or char == '_':
             start_pos = pos
             word, pos = obtener_palabra_completa(text_area, pos)
-
-            if word.lower() in logical_words:
-                text_area.tag_add("logical_tag", start_pos, pos)
-            elif word in keywords:
-                text_area.tag_add("keyword_tag", start_pos, pos)
-
+            if word.lower() in logical_words or word in keywords:
+                if word.lower() in logical_words:
+                    text_area.tag_add("logical_tag", start_pos, pos)
+                else:
+                    text_area.tag_add("keyword_tag", start_pos, pos)
+                token_reconocido = True
+            else:
+                token_reconocido = True # Consideramos identificadores válidos por ahora
             continue
 
-        # Verificar operadores de incremento/decremento (++ y --)
+        # Verificar operadores de incremento/decremento
         if (char == "+" and next_char == "+") or (char == "-" and next_char == "-"):
             text_area.tag_add("arithmetic_tag", pos, text_area.index(f"{pos}+2c"))
             pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            avanzar = 2
             continue
 
-        # Verificar operadores relacionales (==, !=, <=, >=)
+        # Verificar operadores relacionales de dos caracteres
         if ((char in "=!<>" and next_char == "=") or
             (char in "<>" and next_char == "=")):
             text_area.tag_add("logical_tag", pos, text_area.index(f"{pos}+2c"))
             pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            avanzar = 2
             continue
 
-        # Verificar operadores lógicos (&&, ||)
+        # Verificar operadores lógicos
         if (char == "&" and next_char == "&") or (char == "|" and next_char == "|"):
             text_area.tag_add("logical_tag", pos, text_area.index(f"{pos}+2c"))
             pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            avanzar = 2
             continue
 
-        # Verificar operadores de asignación compuestos (+=, -=, *=, /=, %=, ^=)
-        if char in arithmetic_ops_single and next_char == "=":
-            text_area.tag_add("assign_tag", pos, text_area.index(f"{pos}+2c"))
-            pos = text_area.index(f"{pos}+2c")
-            continue
-
-        # Verificar operador de asignación simple (=). "+=", "-=", "*=", "/=", "%=", "^="     
-        if char == "=" or (char in arithmetic_ops_plus_minus and next_char == "=") or (char in arithmetic_ops_single and next_char == "="):
+        # Verificar operadores de asignación
+        if char == "=" or (char in arithmetic_ops_single and next_char == "=") or \
+           (char in arithmetic_ops_plus_minus and next_char == "="):
             text_area.tag_add("assign_tag", pos, text_area.index(f"{pos}+1c"))
             pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
             continue
 
-        # Verificar operadores aritméticos de un carácter (*, /, %, ^)
+        # Verificar operadores aritméticos simples
         if char in arithmetic_ops_single:
-            text_area.tag_add("arithmetic_tag", pos,
-                              text_area.index(f"{pos}+1c"))
+            text_area.tag_add("arithmetic_tag", pos, text_area.index(f"{pos}+1c"))
             pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
             continue
 
-        # Verificar operadores aritméticos de un carácter (+, -)
+        # Verificar operadores aritméticos + y -
         if char in arithmetic_ops_plus_minus:
-            # Se considera parte de un número solo si...
             es_signo_de_numero = False
             if next_char.isdigit():
                 prev_pos = text_area.index(f"{pos}-1c") if text_area.compare("1.0", "<", pos) else None
                 prev_char = text_area.get(prev_pos) if prev_pos else None
-
                 if prev_char is None or not prev_char.isalnum():
                     es_signo_de_numero = True
-
             if es_signo_de_numero:
                 start_pos = pos
-                pos = procesar_numero(text_area, pos)
-                continue
+                pos, num_errors = procesar_numero(text_area, pos, fila, columna, errores_lexicos)
             else:
-                text_area.tag_add("arithmetic_tag", pos,
-                                  text_area.index(f"{pos}+1c"))
+                text_area.tag_add("arithmetic_tag", pos, text_area.index(f"{pos}+1c"))
                 pos = text_area.index(f"{pos}+1c")
-                continue
+            token_reconocido = True
+            continue
 
-        # Verificar operadores relacionales de un carácter (<, >)
-        if char in "<>":
+        # Verificar operadores relacionales de un carácter
+        if char in relational_ops_single:
             text_area.tag_add("logical_tag", pos, text_area.index(f"{pos}+1c"))
             pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
             continue
 
         # Verificar símbolos
         if char in symbols:
             text_area.tag_add("symbol_tag", pos, text_area.index(f"{pos}+1c"))
             pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
             continue
 
-        # Avanzar si no se aplica ninguna regla
-        pos = text_area.index(f"{pos}+1c")
-
+        # Si no se reconoce ningún token, es un error de carácter inválido
+        if not token_reconocido and char.strip():
+            error_msg = f"Error léxico: Carácter inválido '{char}' en Fila {fila}, Columna {columna}"
+            errores_lexicos.append(error_msg)
+            pos = text_area.index(f"{pos}+1c")
+            continue
+        elif not token_reconocido:
+            pos = text_area.index(f"{pos}+1c")
+            continue
+    
+    # Retornar la lista de errores léxicos
+    return errores_lexicos
 
 def marcar_comentarios_primero(text_area):
-    # Marca todos los comentarios primero para darles prioridad
+    # Marca todos los comentarios primero para darles prioridad"""
     # Buscar comentarios de línea (//)
     pos = "1.0"
     while True:
@@ -184,29 +192,56 @@ def marcar_comentarios_primero(text_area):
             pos = end_pos  # Continuar desde el final del comentario
 
 
-def procesar_numero(text_area, pos):
-    # Procesa y marca un número (entero o decimal)
+def procesar_numero(text_area, pos, fila, columna, errores_lexicos):
+    # Procesa y marca un número (entero o decimal) y detecta errores
     start_pos = pos
+    tiene_punto = False
+    pos_inicial = pos
     char = text_area.get(pos)
 
     # Manejar signo inicial
     if char in '+-':
         pos = text_area.index(f"{pos}+1c")
+        # Actualizar la columna para el mensaje de error
+        pos_parts = pos.split(".")
+        columna_actual = int(pos_parts[1]) + 1
+        
+        if not text_area.compare(pos, "<", "end") or not text_area.get(pos).isdigit():
+            error_msg = f"Error léxico: Signo '{char}' sin número siguiente en Fila {fila}, Columna {columna}"
+            errores_lexicos.append(error_msg)
+            return pos, 1  # Retornar posición y número de errores
 
-    tiene_punto = False
     while text_area.compare(pos, "<", "end"):
         char = text_area.get(pos)
+        # Obtener la posición actual para mensajes de error
+        pos_parts = pos.split(".")
+        fila_actual = int(pos_parts[0])
+        columna_actual = int(pos_parts[1]) + 1
+        
         if char.isdigit():
             pos = text_area.index(f"{pos}+1c")
         elif char == '.' and not tiene_punto:
             tiene_punto = True
             pos = text_area.index(f"{pos}+1c")
+            
+            # Verificar si el siguiente carácter después del punto es un dígito
+            if text_area.compare(pos, "<", "end"):
+                next_char_after_dot = text_area.get(pos)
+                if not next_char_after_dot.isdigit():
+                    # Error: punto seguido de no dígito
+                    error_msg = f"Error léxico: Punto decimal mal formado en Fila {fila_actual}, Columna {columna_actual}"
+                    errores_lexicos.append(error_msg)
+                    break # Detener el procesamiento del número
+            else:
+                # Error: punto al final del texto
+                error_msg = f"Error léxico: Punto decimal mal formado al final en Fila {fila_actual}, Columna {columna_actual}"
+                errores_lexicos.append(error_msg)
+                break
         else:
             break
 
     text_area.tag_add("number_tag", start_pos, pos)
-    return pos
-
+    return pos, 0  # Retornar posición y número de errores (0 si no hubo errores)
 
 def obtener_palabra_completa(text_area, pos):
     # Obtiene una palabra completa desde la posición actual
@@ -221,3 +256,164 @@ def obtener_palabra_completa(text_area, pos):
             break
 
     return word, pos
+
+def tokenizar_codigo(text_area):
+    """
+    Analiza el texto en el área de texto y genera una lista de tokens encontrados.
+    Cada token incluye su tipo, valor, línea y columna.
+    """
+    # Listas para almacenar los tokens
+    tokens = []
+    
+    # Colecciones de tokens
+    keywords = {"if", "then", "else", "end", "do", "while", "switch", "case", "int", "float", "real", "main", "cin", "cout", "until"}
+    arithmetic_ops_single = {"*", "/", "%", "^"}
+    arithmetic_ops_plus_minus = {"+", "-"}
+    logical_words = {"and", "or", "not", "AND", "OR", "NOT"}
+    assign_ops = {"=", "+=", "-=", "*=", "/=", "%=", "^="}
+    symbols = {"(", ")", "{", "}", "[", "]", ";", ","}
+    relational_ops_single = {"<", ">"}
+    
+    # Primero marcamos los comentarios para poder ignorarlos
+    text_area_temp = text_area
+    marcar_comentarios_primero(text_area_temp)
+    
+    # La posición de análisis comienza desde el principio
+    pos = "1.0"
+    
+    while text_area.compare(pos, "<", "end"):
+        # Obtener la línea y columna actuales desde la posición del texto
+        pos_parts = pos.split(".")
+        fila = int(pos_parts[0])
+        columna = int(pos_parts[1]) + 1  # +1 porque la columna en el widget comienza en 0
+        
+        char = text_area.get(pos)
+        
+        # Obtener el siguiente carácter si existe
+        next_pos = text_area.index(f"{pos}+1c") if text_area.compare(pos, "<", "end-1c") else "end"
+        next_char = text_area.get(next_pos) if text_area.compare(next_pos, "<", "end") else ""
+        
+        # Si estamos en un comentario, saltamos
+        if "comment_tag" in text_area.tag_names(pos):
+            pos = text_area.index(f"{pos}+1c")
+            continue
+        
+        token_reconocido = False
+        
+        # Verificar números
+        if char.isdigit() or (char in '+-' and next_char.isdigit() and
+                              (pos == "1.0" or not text_area.get(f"{pos}-1c").isalnum())):
+            start_pos = pos
+            tiene_punto = False
+            valor_token = ""
+            
+            # Manejar signo inicial
+            if char in '+-':
+                valor_token += char
+                pos = text_area.index(f"{pos}+1c")
+            
+            # Procesar el resto del número
+            while text_area.compare(pos, "<", "end"):
+                char = text_area.get(pos)
+                if char.isdigit():
+                    valor_token += char
+                    pos = text_area.index(f"{pos}+1c")
+                elif char == '.' and not tiene_punto:
+                    tiene_punto = True
+                    valor_token += char
+                    pos = text_area.index(f"{pos}+1c")
+                else:
+                    break
+            
+            # Clasificar como número entero o real
+            if tiene_punto:
+                tokens.append(("Número real", valor_token, fila, columna))
+            else:
+                tokens.append(("Número entero", valor_token, fila, columna))
+            
+            token_reconocido = True
+            continue
+        
+        # Verificar palabras clave, lógicas e identificadores
+        if char.isalpha() or char == '_':
+            start_pos = pos
+            word, pos = obtener_palabra_completa(text_area, pos)
+            
+            if word in keywords:
+                tokens.append(("Palabra reservada", word, fila, columna))
+            elif word.lower() in logical_words:
+                tokens.append(("Operador lógico", word, fila, columna))
+            else:
+                tokens.append(("Identificador", word, fila, columna))
+            
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores de incremento/decremento
+        if (char == "+" and next_char == "+") or (char == "-" and next_char == "-"):
+            tokens.append(("Operador aritmético", char + next_char, fila, columna))
+            pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores relacionales de dos caracteres
+        if ((char in "=!<>" and next_char == "=") or
+            (char in "<>" and next_char == "=")):
+            tokens.append(("Operador relacional", char + next_char, fila, columna))
+            pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores lógicos
+        if (char == "&" and next_char == "&") or (char == "|" and next_char == "|"):
+            tokens.append(("Operador lógico", char + next_char, fila, columna))
+            pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores de asignación
+        if (char in arithmetic_ops_single or char in arithmetic_ops_plus_minus) and next_char == "=":
+            tokens.append(("Operador de asignación", char + next_char, fila, columna))
+            pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            continue
+        elif char == "=":
+            tokens.append(("Operador de asignación", char, fila, columna))
+            pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores aritméticos simples
+        if char in arithmetic_ops_single:
+            tokens.append(("Operador aritmético", char, fila, columna))
+            pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores aritméticos + y -
+        if char in arithmetic_ops_plus_minus:
+            # Si no es parte de un número (ya manejado arriba)
+            tokens.append(("Operador aritmético", char, fila, columna))
+            pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores relacionales de un carácter
+        if char in relational_ops_single:
+            tokens.append(("Operador relacional", char, fila, columna))
+            pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
+            continue
+        
+        # Verificar símbolos
+        if char in symbols:
+            tokens.append(("Símbolo", char, fila, columna))
+            pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
+            continue
+        
+        # Si no reconocimos ningún token, avanzamos
+        if not token_reconocido:
+            pos = text_area.index(f"{pos}+1c")
+    
+    return tokens

@@ -76,9 +76,10 @@ class CodeEditor:
         self.update_line_numbers(None)
         current_text = self.text_area.get("1.0", "end-1c")
         if current_text != self.previous_text:
+            # No necesitamos procesar los errores aquí, solo resaltar el texto
+            # Los errores se mostrarán cuando se haga clic en el botón de análisis léxico
             resaltar_palabras(self.text_area)
             self.previous_text = current_text
-
 
     def setup_bindings(self):
         self.text_area.bind("<KeyRelease>", self.update_after_realize)

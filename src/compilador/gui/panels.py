@@ -5,6 +5,7 @@ from tkinter import ttk, scrolledtext
 class BottomPanels:
     def __init__(self, parent):
         self.parent = parent
+        self.text_widgets = {}  # Diccionario para almacenar los widgets de texto
         self.create_panels()
 
     def create_panels(self):
@@ -40,3 +41,25 @@ class BottomPanels:
             text = scrolledtext.ScrolledText(frame, wrap=tk.WORD)
             text.pack(expand=True, fill=tk.BOTH)
             notebook.add(frame, text=name)
+            # Guardar referencia al widget de texto
+            self.text_widgets[name] = text
+            # Configurar el widget como solo lectura
+            text.config(state="disabled")
+    
+    def get_text_widget(self, tab_name):
+        """Obtener el widget de texto de una pestaña específica"""
+        return self.text_widgets.get(tab_name)
+    
+    def add_text_to_tab(self, tab_name, text, clear=False):
+        """Añadir texto a una pestaña específica"""
+        text_widget = self.get_text_widget(tab_name)
+        if text_widget:
+            # Habilitar temporalmente para poder modificar
+            text_widget.config(state="normal")
+            if clear:
+                text_widget.delete("1.0", tk.END)
+            text_widget.insert(tk.END, text)
+            # Desplazar automáticamente al inicio
+            text_widget.see("1.0")
+            # Volver a deshabilitar para solo lectura
+            text_widget.config(state="disabled")
