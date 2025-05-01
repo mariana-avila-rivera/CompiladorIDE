@@ -61,7 +61,7 @@ class Toolbar:
             # Preparar el texto para mostrar en la pestaña "Léxico"
             tokens_text = "TOKENIZADO:\n\n"
             for tipo, valor, linea, columna in tokens:
-                tokens_text += f"{tipo} (Línea: {linea}, Columna: {columna}): '{valor}'\n"
+                tokens_text += f"{tipo} ({linea}, {columna}): '{valor}'\n"
             
             # Añadir texto a la pestaña Léxico
             self.bottom_panels.add_text_to_tab("Léxico", tokens_text, clear=True)

@@ -17,6 +17,21 @@ class CodeEditor:
         # Frame principal
         self.editor_frame = tk.Frame(self.parent)
 
+        # Agregando Labels para mostrar Linea: Columna
+        # Crear un frame contenedor para la barra de estado
+        self.status_bar = tk.Frame(self.parent, height=20, bg="#e0e0e0")
+        self.status_bar.pack(side=tk.TOP, fill=tk.X)
+
+        # Crear el label de línea
+        self.line_label = tk.Label(self.status_bar,
+                                   text="Línea: 1", anchor="w", bg="#e0e0e0")
+        self.line_label.pack(side=tk.LEFT, padx=10)
+
+        # Crear el label de columna
+        self.col_label = tk.Label(self.status_bar,
+                                  text="Columna: 1", anchor="w", bg="#e0e0e0")
+        self.col_label.pack(side=tk.LEFT, padx=10)
+
         # Área de texto
         self.text_area = tk.Text(
             self.editor_frame,
@@ -55,21 +70,6 @@ class CodeEditor:
 
         self.editor_frame.pack(fill=tk.BOTH, expand=True)
         self.text_area.config(wrap="none", xscrollcommand=self.scroll_x.set)
-
-        # Agregando Labels para mostrar Linea: Columna
-        # Crear un frame contenedor para la barra de estado
-        self.status_bar = tk.Frame(self.parent, height=20, bg="#e0e0e0")
-        self.status_bar.pack(side=tk.TOP, fill=tk.X)
-
-        # Crear el label de línea
-        self.line_label = tk.Label(self.status_bar,
-                                   text="Línea: 1", anchor="w", bg="#e0e0e0")
-        self.line_label.pack(side=tk.LEFT, padx=10)
-
-        # Crear el label de columna
-        self.col_label = tk.Label(self.status_bar,
-                                  text="Columna: 1", anchor="w", bg="#e0e0e0")
-        self.col_label.pack(side=tk.LEFT, padx=10)
 
     def update_after_realize(self, event=None):
         # Actualiza el área de texto después de realizar cambios
