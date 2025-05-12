@@ -198,9 +198,11 @@ def procesar_numero(text_area, pos, fila, columna, errores_lexicos):
     tiene_punto = False
     pos_inicial = pos
     char = text_area.get(pos)
+    numero_completo = ""
 
     # Manejar signo inicial
     if char in '+-':
+        numero_completo += char
         pos = text_area.index(f"{pos}+1c")
         # Actualizar la columna para el mensaje de error
         pos_parts = pos.split(".")
@@ -219,9 +221,11 @@ def procesar_numero(text_area, pos, fila, columna, errores_lexicos):
         columna_actual = int(pos_parts[1]) + 1
         
         if char.isdigit():
+            numero_completo += char
             pos = text_area.index(f"{pos}+1c")
         elif char == '.' and not tiene_punto:
             tiene_punto = True
+            numero_completo += char
             pos = text_area.index(f"{pos}+1c")
             
             # Verificar si el siguiente carácter después del punto es un dígito
@@ -229,12 +233,12 @@ def procesar_numero(text_area, pos, fila, columna, errores_lexicos):
                 next_char_after_dot = text_area.get(pos)
                 if not next_char_after_dot.isdigit():
                     # Error: punto seguido de no dígito
-                    error_msg = f"Error léxico: Carácter inválido '.' en Fila {fila_actual}, Columna {columna_actual}"
+                    error_msg = f"Error léxico: Carácter inválido '{numero_completo}' en Fila {fila_actual}, Columna {columna_actual}"
                     errores_lexicos.append(error_msg)
                     break # Detener el procesamiento del número
             else:
                 # Error: punto al final del texto
-                error_msg = f"Error léxico: Carácter inválido '.' en Fila {fila_actual}, Columna {columna_actual}"
+                error_msg = f"Error léxico: Carácter inválido '{numero_completo}' en Fila {fila_actual}, Columna {columna_actual}"
                 errores_lexicos.append(error_msg)
                 break
         else:
@@ -281,9 +285,6 @@ def tokenizar_codigo(text_area):
     # La posición de análisis comienza desde el principio
     pos = "1.0"
     
-    # Lista para almacenar secuencias de + y - para agruparlos posteriormente
-    chars_acumulados = []
-    
     while text_area.compare(pos, "<", "end"):
         # Obtener la línea y columna actuales desde la posición del texto
         pos_parts = pos.split(".")
@@ -305,46 +306,83 @@ def tokenizar_codigo(text_area):
         
         # Si encontramos un ';', procesamos los operadores + y - acumulados
         if char == ';':
-            # Procesar los operadores acumulados
-            procesar_operadores_acumulados(chars_acumulados, tokens)
-            chars_acumulados = []
             tokens.append(("Símbolo", char, fila, columna))
             pos = text_area.index(f"{pos}+1c")
             token_reconocido = True
             continue
         
-        # Acumular operadores + y -
-        if char in arithmetic_ops_plus_minus and (pos == "1.0" or not text_area.get(f"{pos}-1c").isalnum()):
-            # Verificar si es un signo de número (no debe acumularse)
-            if next_char.isdigit():
-                # Es un signo de número, no lo acumulamos para operadores
-                pass
-            else:
-                # Es un operador, lo acumulamos
-                chars_acumulados.append((char, fila, columna))
+        # Verificar operadores de incremento/decremento
+        if (char == "+" and next_char == "+") or (char == "-" and next_char == "-"):
+            tokens.append(("Operador aritmético", char + next_char, fila, columna))
+            pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores + y - individuales
+        if char in arithmetic_ops_plus_minus:
+            # Verificar si es un signo de número
+            if next_char.isdigit() and (pos == "1.0" or not text_area.get(f"{pos}-1c").isalnum()):
+                # Es un signo de número, procesamos el número completo
+                start_pos = pos
+                valor_token = char
                 pos = text_area.index(f"{pos}+1c")
-                token_reconocido = True
-                continue
+                char = text_area.get(pos) if text_area.compare(pos, "<", "end") else ""
                 
+                # Procesar la parte entera del número
+                while text_area.compare(pos, "<", "end") and char.isdigit():
+                    valor_token += char
+                    pos = text_area.index(f"{pos}+1c")
+                    if text_area.compare(pos, "<", "end"):
+                        char = text_area.get(pos)
+                    else:
+                        break
+                
+                # Verificar si hay un punto decimal
+                if text_area.compare(pos, "<", "end") and char == '.':
+                    next_pos_after_dot = text_area.index(f"{pos}+1c") if text_area.compare(pos, "<", "end-1c") else "end"
+                    next_char_after_dot = text_area.get(next_pos_after_dot) if text_area.compare(next_pos_after_dot, "<", "end") else ""
+                    
+                    if next_char_after_dot.isdigit():
+                        # Es un número real válido
+                        valor_token += char
+                        pos = text_area.index(f"{pos}+1c")
+                        char = text_area.get(pos)
+                        
+                        # Procesar la parte decimal
+                        while text_area.compare(pos, "<", "end") and char.isdigit():
+                            valor_token += char
+                            pos = text_area.index(f"{pos}+1c")
+                            if text_area.compare(pos, "<", "end"):
+                                char = text_area.get(pos)
+                            else:
+                                break
+                        
+                        tokens.append(("Número real", valor_token, fila, columna))
+                    else:
+                        # Es un número entero seguido de un punto que no forma parte del número
+                        # No lo agregamos a tokens ya que es un error
+                        pass
+                else:
+                    # Es un número entero sin punto
+                    tokens.append(("Número entero", valor_token, fila, columna))
+            else:
+                # Es un operador aritmético
+                tokens.append(("Operador aritmético", char, fila, columna))
+                pos = text_area.index(f"{pos}+1c")
+            token_reconocido = True
+            continue
+        
         # Verificar si es un punto suelto (no parte de un número)
         if char == '.' and (next_char == '' or not next_char.isdigit()) and (pos == "1.0" or not text_area.get(f"{pos}-1c").isdigit()):
-            # Es un punto suelto, consideramos como error o símbolo especial
-            tokens.append(("Error", char, fila, columna))
+            # Es un punto suelto, lo ignoramos (no lo agregamos a tokens)
             pos = text_area.index(f"{pos}+1c")
             token_reconocido = True
             continue
         
         # Verificar números
-        if char.isdigit() or (char in '+-' and next_char.isdigit() and
-                              (pos == "1.0" or not text_area.get(f"{pos}-1c").isalnum())):
+        if char.isdigit():
             start_pos = pos
             valor_token = ""
-            
-            # Manejar signo inicial
-            if char in '+-':
-                valor_token += char
-                pos = text_area.index(f"{pos}+1c")
-                char = text_area.get(pos) if text_area.compare(pos, "<", "end") else ""
             
             # Procesar la parte entera del número
             while text_area.compare(pos, "<", "end") and char.isdigit():
@@ -378,7 +416,8 @@ def tokenizar_codigo(text_area):
                     tokens.append(("Número real", valor_token, fila, columna))
                 else:
                     # Es un número entero seguido de un punto que no forma parte del número
-                    tokens.append(("Número entero", valor_token, fila, columna))
+                    # No lo agregamos a tokens ya que es un error
+                    pass
             else:
                 # Es un número entero sin punto
                 tokens.append(("Número entero", valor_token, fila, columna))
@@ -391,10 +430,6 @@ def tokenizar_codigo(text_area):
             start_pos = pos
             word, pos = obtener_palabra_completa(text_area, pos)
             
-            # Procesar los operadores acumulados antes de un identificador
-            procesar_operadores_acumulados(chars_acumulados, tokens)
-            chars_acumulados = []
-            
             if word in keywords:
                 tokens.append(("Palabra reservada", word, fila, columna))
             elif word.lower() in logical_words:
@@ -405,20 +440,9 @@ def tokenizar_codigo(text_area):
             token_reconocido = True
             continue
         
-        # Verificar operadores de incremento/decremento
-        if (char == "+" and next_char == "+") or (char == "-" and next_char == "-"):
-            tokens.append(("Operador aritmético", char + next_char, fila, columna))
-            pos = text_area.index(f"{pos}+2c")
-            token_reconocido = True
-            continue
-        
         # Verificar operadores relacionales de dos caracteres
         if ((char in "=!<>" and next_char == "=") or
             (char in "<>" and next_char == "=")):
-            
-            # Procesar los operadores acumulados antes de un operador relacional
-            procesar_operadores_acumulados(chars_acumulados, tokens)
-            chars_acumulados = []
             
             tokens.append(("Operador relacional", char + next_char, fila, columna))
             pos = text_area.index(f"{pos}+2c")
@@ -428,10 +452,6 @@ def tokenizar_codigo(text_area):
         # Verificar operadores lógicos
         if (char == "&" and next_char == "&") or (char == "|" and next_char == "|"):
             
-            # Procesar los operadores acumulados antes de un operador lógico
-            procesar_operadores_acumulados(chars_acumulados, tokens)
-            chars_acumulados = []
-            
             tokens.append(("Operador lógico", char + next_char, fila, columna))
             pos = text_area.index(f"{pos}+2c")
             token_reconocido = True
@@ -440,19 +460,11 @@ def tokenizar_codigo(text_area):
         # Verificar operadores de asignación
         if (char in arithmetic_ops_single or char in arithmetic_ops_plus_minus) and next_char == "=":
             
-            # Procesar los operadores acumulados antes de un operador de asignación
-            procesar_operadores_acumulados(chars_acumulados, tokens)
-            chars_acumulados = []
-            
             tokens.append(("Operador de asignación", char + next_char, fila, columna))
             pos = text_area.index(f"{pos}+2c")
             token_reconocido = True
             continue
         elif char == "=":
-            
-            # Procesar los operadores acumulados antes de un operador de asignación
-            procesar_operadores_acumulados(chars_acumulados, tokens)
-            chars_acumulados = []
             
             tokens.append(("Operador de asignación", char, fila, columna))
             pos = text_area.index(f"{pos}+1c")
@@ -462,10 +474,6 @@ def tokenizar_codigo(text_area):
         # Verificar operadores aritméticos simples
         if char in arithmetic_ops_single:
             
-            # Procesar los operadores acumulados antes de un operador aritmético
-            procesar_operadores_acumulados(chars_acumulados, tokens)
-            chars_acumulados = []
-            
             tokens.append(("Operador aritmético", char, fila, columna))
             pos = text_area.index(f"{pos}+1c")
             token_reconocido = True
@@ -473,10 +481,6 @@ def tokenizar_codigo(text_area):
         
         # Verificar operadores relacionales de un carácter
         if char in relational_ops_single:
-            
-            # Procesar los operadores acumulados antes de un operador relacional
-            procesar_operadores_acumulados(chars_acumulados, tokens)
-            chars_acumulados = []
             
             tokens.append(("Operador relacional", char, fila, columna))
             pos = text_area.index(f"{pos}+1c")
@@ -486,11 +490,6 @@ def tokenizar_codigo(text_area):
         # Verificar símbolos
         if char in symbols:
             
-            # Procesar los operadores acumulados antes de un símbolo
-            if char != ';':  # Ya manejamos el ';' arriba
-                procesar_operadores_acumulados(chars_acumulados, tokens)
-                chars_acumulados = []
-            
             tokens.append(("Símbolo", char, fila, columna))
             pos = text_area.index(f"{pos}+1c")
             token_reconocido = True
@@ -499,9 +498,6 @@ def tokenizar_codigo(text_area):
         # Si no reconocimos ningún token, avanzamos
         if not token_reconocido:
             pos = text_area.index(f"{pos}+1c")
-    
-    # Procesar cualquier operador + o - restante al final del archivo
-    procesar_operadores_acumulados(chars_acumulados, tokens)
     
     return tokens
 
