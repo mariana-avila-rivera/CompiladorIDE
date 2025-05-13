@@ -71,12 +71,12 @@ class Toolbar:
 
         # Botones de compilar
         icons = {
-            "Nuevo": self.resize_icon("../media/icons/newFile.png"),
-            "Abrir": self.resize_icon("../media/icons/openFile.png"),
-            "Guardar": self.resize_icon("../media/icons/saveFile.png"),
-            "Cerrar": self.resize_icon("../media/icons/closeFile.png"),
-            "Compilar": self.resize_icon("../media/icons/compile.png"),
-            "Debuguear": self.resize_icon("../media/icons/debugg.png"),
+            "Nuevo": self.resize_icon("media/icons/newFile.png"),
+            "Abrir": self.resize_icon("media/icons/openFile.png"),
+            "Guardar": self.resize_icon("media/icons/saveFile.png"),
+            "Cerrar": self.resize_icon("media/icons/closeFile.png"),
+            "Compilar": self.resize_icon("media/icons/compile.png"),
+            "Debuguear": self.resize_icon("media/icons/debugg.png"),
         }
         buttonsIcons = [
             ("Nuevo", self.file_manager.new_file),

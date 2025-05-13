@@ -12,7 +12,7 @@ def resaltar_palabras(text_area):
     text_area.tag_config("symbol_tag", foreground="#FF00FF")
     text_area.tag_config("assign_tag", foreground="#1FBB9A")
 
-    # Colecciones de tokens (sin cambios)
+    # Colecciones de tokens
     keywords = {"if", "then", "else", "end", "do", "while", "switch", "case", "int", "float", "real", "main", "cin", "cout", "until"}
     arithmetic_ops_single = {"*", "/", "%", "^"}
     arithmetic_ops_plus_minus = {"+", "-"}
@@ -24,7 +24,7 @@ def resaltar_palabras(text_area):
     # Lista para almacenar los errores léxicos encontrados
     errores_lexicos = []
 
-    # Tratar el texto completo primero para comentarios (sin cambios)
+    # Tratar el texto completo primero para comentarios
     marcar_comentarios_primero(text_area)
 
     # La posición de análisis comienza desde el principio
@@ -157,6 +157,7 @@ def resaltar_palabras(text_area):
     # Retornar la lista de errores léxicos
     return errores_lexicos
 
+
 def marcar_comentarios_primero(text_area):
     # Marca todos los comentarios primero para darles prioridad"""
     # Buscar comentarios de línea (//)
@@ -207,7 +208,7 @@ def procesar_numero(text_area, pos, fila, columna, errores_lexicos):
         # Actualizar la columna para el mensaje de error
         pos_parts = pos.split(".")
         columna_actual = int(pos_parts[1]) + 1
-        
+
         if not text_area.compare(pos, "<", "end") or not text_area.get(pos).isdigit():
             error_msg = f"Error léxico: Signo '{char}' sin número siguiente en Fila {fila}, Columna {columna}"
             errores_lexicos.append(error_msg)
