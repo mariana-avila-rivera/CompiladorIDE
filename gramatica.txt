@@ -1,0 +1,66 @@
+programa → main { lista_declaracion }
+
+lista_declaracion → declaracion lista_declaracion | ε
+
+declaracion → declaracion_variable | sentencia
+
+declaracion_variable → tipo lista_identificadores ;
+
+lista_identificadores → id lista_identificadores_aux
+
+lista_identificadores_aux → , id lista_identificadores_aux | ε
+
+tipo → int | float | bool
+
+sentencia → seleccion | iteracion | repeticion | sent_in | sent_out | asignacion
+
+asignacion → id asignacion_op
+
+asignacion_op → = expresion ;
+              | ++ ;
+              | --  ;
+
+seleccion → if ( expresion ) then lista_sentencias seleccion_aux
+seleccion_aux → else lista_sentencias end | end
+
+iteracion → while ( expresion ) lista_sentencias end
+
+repeticion → do lista_sentencias until ( expresion ) ;
+
+sent_in → cin >> id ;
+
+sent_out → cout << lista_salida ;
+
+lista_salida → elemento_salida lista_salida_aux
+lista_salida_aux → << elemento_salida lista_salida_aux | ε
+
+elemento_salida → cadena | expresion
+
+lista_sentencias → sentencia lista_sentencias | ε
+
+expresion → expresion_simple expresion_aux
+expresion_aux → rel_op expresion_simple | ε
+
+rel_op → < | <= | > | >= | == | !=
+
+expresion_simple → termino expresion_simple_aux
+expresion_simple_aux → suma_op termino expresion_simple_aux | ε
+
+suma_op → + | - | ++ | --
+
+termino → componente termino_aux
+termino_aux → operador_termino componente termino_aux | ε
+
+operador_termino → mult_op | ^
+
+mult_op → * | / | %
+
+componente → ( expresion ) 
+           | numero 
+           | id 
+           | booleano
+           | ! componente
+
+booleano → true | false
+
+cadena → "cualquier_texto"
