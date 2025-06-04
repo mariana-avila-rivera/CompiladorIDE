@@ -11,9 +11,11 @@ def resaltar_palabras(text_area):
     text_area.tag_config("logical_tag", foreground="#763A58")
     text_area.tag_config("symbol_tag", foreground="#FF00FF")
     text_area.tag_config("assign_tag", foreground="#1FBB9A")
+    text_area.tag_config("string_tag", foreground="#A31621")  # Color para strings
+    text_area.tag_config("shift_tag", foreground="#1F642B")   # Color para operadores de shift
 
     # Colecciones de tokens
-    keywords = {"if", "then", "else", "end", "do", "while", "switch", "case", "int", "float", "real", "main", "cin", "cout", "until"}
+    keywords = {"if", "then", "else", "end", "do", "while", "switch", "case", "int", "float", "main", "cin", "cout", "until"}
     arithmetic_ops_single = {"*", "/", "%", "^"}
     arithmetic_ops_plus_minus = {"+", "-"}
     logical_words = {"and", "or", "not", "AND", "OR", "NOT"}
@@ -51,6 +53,13 @@ def resaltar_palabras(text_area):
         token_reconocido = False
         avanzar = 1 # Cantidad de caracteres para avanzar por defecto
 
+        # Verificar strings entre comillas dobles
+        if char == '"':
+            start_pos = pos
+            pos, string_errors = procesar_string(text_area, pos, fila, columna, errores_lexicos)
+            token_reconocido = True
+            continue
+
         # Verificar números
         if char.isdigit() or (char in '+-' and next_char.isdigit() and
                                (pos == "1.0" or not text_area.get(f"{pos}-1c").isalnum())):
@@ -71,6 +80,13 @@ def resaltar_palabras(text_area):
                 token_reconocido = True
             else:
                 token_reconocido = True # Consideramos identificadores válidos por ahora
+            continue
+
+        # Verificar operadores de shift lógico (<< y >>)
+        if (char == "<" and next_char == "<") or (char == ">" and next_char == ">"):
+            text_area.tag_add("shift_tag", pos, text_area.index(f"{pos}+2c"))
+            pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
             continue
 
         # Verificar operadores de incremento/decremento
@@ -305,6 +321,22 @@ def tokenizar_codigo(text_area):
         
         token_reconocido = False
         
+        # Verificar strings entre comillas dobles
+        if char == '"':
+            start_pos = pos
+            valor_string, pos = obtener_string_completo(text_area, pos)
+            if valor_string is not None:
+                tokens.append(("String", valor_string, fila, columna))
+            token_reconocido = True
+            continue
+        
+        # Verificar operadores de shift lógico (<< y >>)
+        if (char == "<" and next_char == "<") or (char == ">" and next_char == ">"):
+            tokens.append(("Operador de shift", char + next_char, fila, columna))
+            pos = text_area.index(f"{pos}+2c")
+            token_reconocido = True
+            continue
+        
         # Si encontramos un ';', procesamos los operadores + y - acumulados
         if char == ';':
             tokens.append(("Símbolo", char, fila, columna))
@@ -519,3 +551,64 @@ def procesar_operadores_acumulados(chars_acumulados, tokens):
             char, fila, columna = chars_acumulados[i]
             tokens.append(("Operador aritmético", char, fila, columna))
             i += 1
+
+def procesar_string(text_area, pos, fila, columna, errores_lexicos):
+    """
+    Procesa y marca un string entre comillas dobles y detecta errores
+    """
+    start_pos = pos
+    string_completo = ""
+    pos = text_area.index(f"{pos}+1c")  # Saltar la comilla inicial
+    
+    while text_area.compare(pos, "<", "end"):
+        char = text_area.get(pos)
+        pos_parts = pos.split(".")
+        fila_actual = int(pos_parts[0])
+        columna_actual = int(pos_parts[1]) + 1
+        
+        if char == '"':
+            # Encontramos la comilla de cierre
+            pos = text_area.index(f"{pos}+1c")  # Incluir la comilla de cierre
+            text_area.tag_add("string_tag", start_pos, pos)
+            return pos, 0
+        elif char == '\n':
+            # String sin cerrar (nueva línea antes del cierre)
+            error_msg = f"Error léxico: String no cerrado en Fila {fila}, Columna {columna}"
+            errores_lexicos.append(error_msg)
+            text_area.tag_add("string_tag", start_pos, pos)
+            return pos, 1
+        else:
+            string_completo += char
+            pos = text_area.index(f"{pos}+1c")
+    
+    # Si llegamos aquí, el string llegó al final del archivo sin cerrarse
+    error_msg = f"Error léxico: String no cerrado en Fila {fila}, Columna {columna}"
+    errores_lexicos.append(error_msg)
+    text_area.tag_add("string_tag", start_pos, "end")
+    return pos, 1
+
+def obtener_string_completo(text_area, pos):
+    """
+    Obtiene un string completo desde la posición actual (incluyendo las comillas)
+    """
+    if text_area.get(pos) != '"':
+        return None, pos
+    
+    start_pos = pos
+    string_valor = '"'
+    pos = text_area.index(f"{pos}+1c")  # Saltar la comilla inicial
+    
+    while text_area.compare(pos, "<", "end"):
+        char = text_area.get(pos)
+        string_valor += char
+        pos = text_area.index(f"{pos}+1c")
+        
+        if char == '"':
+            # Encontramos la comilla de cierre
+            return string_valor, pos
+        elif char == '\n':
+            # String sin cerrar (nueva línea antes del cierre)
+            return None, pos
+    
+    # Si llegamos aquí, el string llegó al final del archivo sin cerrarse
+    return None, pos
