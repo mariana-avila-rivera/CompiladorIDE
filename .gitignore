@@ -1,2 +1,3 @@
 docs/
 .zip
+__pycache__/
