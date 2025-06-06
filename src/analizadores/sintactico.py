@@ -43,13 +43,13 @@ class AnalizadorSintactico:
             ],
             'seleccion': [['if', '(', 'expresion', ')', 'then', 'lista_sentencias', 'seleccion_aux']],
             'seleccion_aux': [
-                ['else', 'lista_sentencias', 'end'],
-                ['end']
+                ['else', 'lista_sentencias', 'end',';'],
+                ['end', ';']
             ],
-            'iteracion': [['while', '(', 'expresion', ')', 'lista_sentencias', 'end']],
+            'iteracion': [['while', '(', 'expresion', ')', 'lista_sentencias', 'end', ';']],
             'repeticion': [
                 ['do', 'lista_sentencias', 'until', '(', 'expresion', ')', ';'],
-                ['do', 'lista_sentencias', 'while', '(', 'expresion', ')', 'lista_sentencias', 'end']
+                ['do', 'lista_sentencias', 'while', '(', 'expresion', ')', 'lista_sentencias', 'end', ';']
             ],
             'sent_in': [['cin', '>>', 'id', ';']],
             'sent_out': [['cout', '<<', 'lista_salida', ';']],
@@ -302,6 +302,7 @@ class AnalizadorSintactico:
                     
                     # Intento de recuperación de error
                     if self._intentar_recuperacion(pila, tokens_input, indice):
+                        indice += 1  # Saltar el token actual
                         exito_general = False
                         continue
                     else:
@@ -343,6 +344,7 @@ class AnalizadorSintactico:
                     
                     # Intento de recuperación de error
                     if self._intentar_recuperacion(pila, tokens_input, indice):
+                        indice += 1  # Saltar el token actual
                         exito_general = False
                         continue
                     else:
@@ -382,11 +384,35 @@ class AnalizadorSintactico:
         self.errores.append(error)
     
     def _intentar_recuperacion(self, pila, tokens_input, indice):
-        """Intenta recuperarse de un error sintáctico"""
-        # Estrategia simple: saltar el token actual
-        if indice < len(tokens_input) - 1:
-            return True
-        return False
+        """Intenta recuperarse de un error sintáctico siguiendo la estrategia LL(1)"""
+        if indice >= len(tokens_input) - 1:  # Si estamos en el último token
+            return False
+            
+        tope = pila[-1]
+        token_actual, tipo_token, linea, columna = tokens_input[indice]
+        
+        # Si el tope es un no terminal, intentamos encontrar un token válido
+        if tope in self.no_terminales:
+            # Obtener los conjuntos First y Follow del no terminal
+            first = self.primeros[tope]
+            follow = self.siguientes[tope]
+            conjunto_sincronizacion = first | follow
+            
+            # Saltar tokens hasta encontrar uno en el conjunto de sincronización
+            while indice < len(tokens_input) - 1:
+                indice += 1
+                token_siguiente, tipo_siguiente, _, _ = tokens_input[indice]
+                token_mapeado = self._mapear_token_a_terminal(token_siguiente, tipo_siguiente)
+                
+                if token_mapeado in conjunto_sincronizacion:
+                    # Encontramos un token válido, podemos continuar
+                    return True
+                    
+            # Si llegamos aquí, no encontramos un token válido
+            return False
+            
+        # Si el tope es un terminal, simplemente saltamos el token actual
+        return True
     
     def obtener_errores(self):
         """Retorna la lista de errores encontrados"""
@@ -412,7 +438,7 @@ class AnalizadorSintactico:
         return simbolo_gramatica == token
     
     def _mapear_token_a_terminal(self, token, tipo_token):
-        """Mapea un token a su símbolo terminal correspondiente"""
+        """Mapea un token a su símbolo terminal correspondiente usando la información del archivo JSON"""
         # Mapeo directo para palabras reservadas
         palabras_reservadas = {
             'main', 'if', 'then', 'else', 'end', 'while', 'do', 'until',
@@ -422,18 +448,31 @@ class AnalizadorSintactico:
         if token in palabras_reservadas:
             return token
         
-        # Mapeo por tipo de token
+        # Mapeo por tipo de token según el JSON
         mapeo_tipos = {
             'Identificador': 'id',
             'Número entero': 'numero',
             'Número real': 'numero',
-            'String': 'cadena'
+            'String': 'cadena',
+            'Palabra reservada': lambda t: t.lower() if t.lower() in palabras_reservadas else 'id',
+            'Operador aritmético': lambda t: t if t in {'+', '-', '*', '/', '%', '^', '++', '--'} else None,
+            'Operador relacional': lambda t: t if t in {'<', '<=', '>', '>=', '==', '!='} else None,
+            'Operador lógico': lambda t: t.lower() if t.lower() in {'and', 'or', 'not'} else None,
+            'Operador de asignación': lambda t: t if t in {'=', '+=', '-=', '*=', '/=', '%=', '^='} else None,
+            'Operador de shift': lambda t: t if t in {'<<', '>>'} else None,
+            'Símbolo': lambda t: t if t in {'(', ')', '{', '}', '[', ']', ';', ','} else None
         }
         
         if tipo_token in mapeo_tipos:
-            return mapeo_tipos[tipo_token]
+            mapeo = mapeo_tipos[tipo_token]
+            if callable(mapeo):
+                resultado = mapeo(token)
+                if resultado is not None:
+                    return resultado
+            else:
+                return mapeo
         
-        # Para operadores y símbolos, usar el token directamente
+        # Si no se encuentra un mapeo específico, intentar usar el token directamente
         return token
     
     def inicializar(self):
