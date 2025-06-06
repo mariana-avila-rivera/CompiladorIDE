@@ -1,3 +1,6 @@
+import tkinter as tk
+from tkinter import ttk
+
 class AnalizadorSintactico:
     def __init__(self):
         self.gramatica = self._definir_gramatica()
@@ -7,6 +10,7 @@ class AnalizadorSintactico:
         self.siguientes = {}
         self.tabla_ll1 = {}
         self.arbol_sintactico = None
+        self.errores = []  # Lista para almacenar errores sintácticos
         
     def _definir_gramatica(self):
         """Define las reglas de la gramática"""
@@ -240,8 +244,7 @@ class AnalizadorSintactico:
                     else:
                         # Conflicto en la tabla
                         print(f"Conflicto en M[{no_terminal}, {terminal}]")
-                
-                # Si ε ∈ PRIMEROS(producción)
+                  # Si ε ∈ PRIMEROS(producción)
                 if 'ε' in primeros_prod:
                     for terminal in self.siguientes[no_terminal]:
                         if self.tabla_ll1[no_terminal][terminal] is None:
@@ -250,10 +253,15 @@ class AnalizadorSintactico:
                             print(f"Conflicto en M[{no_terminal}, {terminal}]")
     
     def analizar(self, tokens):
-        """Analiza una lista de tokens usando la tabla LL(1)"""
+        """Analiza una lista de tokens usando la tabla LL(1) con manejo de errores mejorado"""
+        self.errores = []  # Reiniciar errores
+        
         # Preparar tokens
-        tokens_input = [(token[1], token[0]) for token in tokens if token[1].strip()]
-        tokens_input.append(('$', 'EOF'))
+        tokens_input = []
+        for token in tokens:
+            if len(token) >= 4 and token[1].strip():  # Validar formato del token
+                tokens_input.append((token[1], token[0], token[2], token[3]))  # lexema, tipo, linea, columna
+        tokens_input.append(('$', 'EOF', 0, 0))
         
         # Inicializar pila y índice
         pila = ['$', 'programa']
@@ -265,15 +273,18 @@ class AnalizadorSintactico:
         print(f"{'Pila':<30} {'Entrada':<20} {'Acción'}")
         print("-" * 70)
         
-        while len(pila) > 1:
+        exito_general = True
+        
+        while len(pila) > 1 and indice < len(tokens_input):
             tope = pila[-1]
             nodo_actual = pila_nodos[-1]
             
             if indice < len(tokens_input):
-                token_actual, tipo_token = tokens_input[indice]
+                token_actual, tipo_token, linea, columna = tokens_input[indice]
             else:
-                print("Error: Se acabaron los tokens")
-                return False, None
+                self._agregar_error("Error fatal: Se acabaron los tokens inesperadamente", 0, 0)
+                exito_general = False
+                break
             
             print(f"{str(pila):<30} {token_actual:<20}", end=" ")
             
@@ -285,8 +296,17 @@ class AnalizadorSintactico:
                     indice += 1
                     print(f"Coincide {tope}")
                 else:
-                    print(f"Error: Se esperaba {tope}, se encontró {token_actual}")
-                    return False, None
+                    error_msg = f"Se esperaba '{tope}', se encontró '{token_actual}'"
+                    self._agregar_error(error_msg, linea, columna)
+                    print(f"Error: {error_msg}")
+                    
+                    # Intento de recuperación de error
+                    if self._intentar_recuperacion(pila, tokens_input, indice):
+                        exito_general = False
+                        continue
+                    else:
+                        exito_general = False
+                        break
             
             # Si el tope es no terminal
             elif tope in self.no_terminales:
@@ -317,18 +337,60 @@ class AnalizadorSintactico:
                         hijo_epsilon = NodoArbol('ε')
                         nodo_actual.agregar_hijo(hijo_epsilon)
                 else:
-                    print(f"Error: No hay regla para M[{tope}, {token_busqueda}]")
-                    return False, None
+                    error_msg = f"No existe regla para el no-terminal '{tope}' con el token '{token_actual}'"
+                    self._agregar_error(error_msg, linea, columna)
+                    print(f"Error: {error_msg}")
+                    
+                    # Intento de recuperación de error
+                    if self._intentar_recuperacion(pila, tokens_input, indice):
+                        exito_general = False
+                        continue
+                    else:
+                        exito_general = False
+                        break
             else:
-                print(f"Error: Símbolo desconocido {tope}")
-                return False, None
+                error_msg = f"Símbolo desconocido en la pila: '{tope}'"
+                self._agregar_error(error_msg, linea, columna)
+                print(f"Error: {error_msg}")
+                exito_general = False
+                break
         
-        if indice == len(tokens_input) - 1 and tokens_input[indice][0] == '$':
-            print("Análisis completado exitosamente")
-            return True, arbol
+        # Verificar si se completó correctamente
+        if len(pila) == 1 and indice == len(tokens_input) - 1 and tokens_input[indice][0] == '$':
+            if exito_general and not self.errores:
+                print("Análisis completado exitosamente")
+                return True, arbol
+            else:
+                print("Análisis completado con errores")
+                return False, arbol
         else:
-            print("Error: Tokens restantes en la entrada")
-            return False, None
+            if indice < len(tokens_input) - 1:
+                self._agregar_error("Tokens restantes en la entrada", 0, 0)
+            if len(pila) > 1:
+                self._agregar_error("Símbolos restantes en la pila", 0, 0)
+            print("Error: Análisis incompleto")
+            return False, arbol
+    
+    def _agregar_error(self, mensaje, linea, columna):
+        """Agrega un error a la lista de errores"""
+        error = {
+            'tipo': 'Error Sintáctico',
+            'mensaje': mensaje,
+            'linea': linea,
+            'columna': columna
+        }
+        self.errores.append(error)
+    
+    def _intentar_recuperacion(self, pila, tokens_input, indice):
+        """Intenta recuperarse de un error sintáctico"""
+        # Estrategia simple: saltar el token actual
+        if indice < len(tokens_input) - 1:
+            return True
+        return False
+    
+    def obtener_errores(self):
+        """Retorna la lista de errores encontrados"""
+        return self.errores
     
     def _tokens_coinciden(self, simbolo_gramatica, token, tipo_token):
         """Verifica si un token coincide con un símbolo de la gramática"""
@@ -418,6 +480,121 @@ class NodoArbol:
             es_ultimo = i == len(self.hijos) - 1
             nuevo_prefijo = prefijo + ("    " if nivel > 0 and es_ultimo else "│   " if nivel > 0 else "")
             hijo.mostrar_arbol(nivel + 1, nuevo_prefijo)
+    
+    def to_dict(self):
+        """Convierte el nodo y sus hijos a un diccionario para facilitar la visualización"""
+        return {
+            'valor': self.valor,
+            'hijos': [hijo.to_dict() for hijo in self.hijos]
+        }
+
+
+class TreeVisualizationWidget:
+    """Widget para visualizar el árbol sintáctico de forma gráfica y colapsable"""
+    def __init__(self, parent):
+        self.parent = parent
+        self.tree = None
+        self.create_widget()
+    
+    def create_widget(self):
+        """Crea el widget de visualización del árbol"""
+        # Frame principal
+        self.main_frame = tk.Frame(self.parent)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Crear Treeview con scrollbars
+        self.tree_frame = tk.Frame(self.main_frame)
+        self.tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbars
+        v_scrollbar = ttk.Scrollbar(self.tree_frame, orient=tk.VERTICAL)
+        h_scrollbar = ttk.Scrollbar(self.tree_frame, orient=tk.HORIZONTAL)
+        
+        # Treeview
+        self.tree = ttk.Treeview(self.tree_frame, 
+                                yscrollcommand=v_scrollbar.set,
+                                xscrollcommand=h_scrollbar.set)
+        
+        # Configurar scrollbars
+        v_scrollbar.config(command=self.tree.yview)
+        h_scrollbar.config(command=self.tree.xview)
+        
+        # Posicionar elementos
+        self.tree.grid(row=0, column=0, sticky='nsew')
+        v_scrollbar.grid(row=0, column=1, sticky='ns')
+        h_scrollbar.grid(row=1, column=0, sticky='ew')
+        
+        # Configurar grid weights
+        self.tree_frame.grid_rowconfigure(0, weight=1)
+        self.tree_frame.grid_columnconfigure(0, weight=1)
+        
+        # Configurar columnas del treeview
+        self.tree.heading('#0', text='Árbol Sintáctico', anchor='w')
+        self.tree.column('#0', width=300, minwidth=100)
+        
+        # Etiqueta para mostrar cuando no hay árbol
+        self.no_tree_label = tk.Label(self.main_frame, 
+                                     text="No hay árbol sintáctico para mostrar",
+                                     fg="gray")
+        
+    def mostrar_arbol(self, nodo_raiz):
+        """Muestra el árbol sintáctico en el widget"""
+        if not nodo_raiz:
+            self.mostrar_mensaje("No hay árbol sintáctico para mostrar")
+            return
+        
+        # Limpiar árbol anterior
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        # Ocultar etiqueta de "no hay árbol"
+        self.no_tree_label.pack_forget()
+        
+        # Mostrar el treeview
+        self.tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Agregar nodos al árbol
+        self._agregar_nodo_al_tree(nodo_raiz, '')
+        
+        # Expandir todos los nodos inicialmente
+        self._expandir_todos()
+    
+    def _agregar_nodo_al_tree(self, nodo, parent_id):
+        """Recursivamente agrega nodos al treeview"""
+        # Insertar el nodo actual
+        node_id = self.tree.insert(parent_id, 'end', text=nodo.valor, open=True)
+        
+        # Agregar hijos
+        for hijo in nodo.hijos:
+            self._agregar_nodo_al_tree(hijo, node_id)
+        
+        return node_id
+    
+    def _expandir_todos(self):
+        """Expande todos los nodos del árbol"""
+        def expandir_recursivo(item):
+            self.tree.item(item, open=True)
+            for child in self.tree.get_children(item):
+                expandir_recursivo(child)
+        
+        for item in self.tree.get_children():
+            expandir_recursivo(item)
+    
+    def mostrar_mensaje(self, mensaje):
+        """Muestra un mensaje cuando no hay árbol"""
+        # Ocultar treeview
+        self.tree_frame.pack_forget()
+        
+        # Actualizar y mostrar etiqueta
+        self.no_tree_label.config(text=mensaje)
+        self.no_tree_label.pack(expand=True)
+    
+    def limpiar(self):
+        """Limpia el widget"""
+        if self.tree:
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+        self.mostrar_mensaje("No hay árbol sintáctico para mostrar")
 
 
 def analizar_sintacticamente(tokens):
@@ -438,3 +615,51 @@ def analizar_sintacticamente(tokens):
         return True, arbol
     else:
         return False, None
+
+def leer_tokens_desde_archivo(archivo_path):
+    """Lee tokens desde un archivo de texto con formato: tipo lexema linea columna"""
+    tokens = []
+    try:
+        with open(archivo_path, 'r', encoding='utf-8') as file:
+            for linea_num, linea in enumerate(file, 1):
+                linea = linea.strip()
+                if linea and not linea.startswith('#'):  # Ignorar líneas vacías y comentarios
+                    partes = linea.split('\t')  # Asumiendo separación por tabulación
+                    if len(partes) >= 4:
+                        tipo = partes[0]
+                        lexema = partes[1]
+                        linea_token = int(partes[2])
+                        columna_token = int(partes[3])
+                        tokens.append((tipo, lexema, linea_token, columna_token))
+                    else:
+                        # Intento con separación por espacios
+                        partes = linea.split()
+                        if len(partes) >= 4:
+                            tipo = partes[0]
+                            lexema = partes[1]
+                            linea_token = int(partes[2])
+                            columna_token = int(partes[3])
+                            tokens.append((tipo, lexema, linea_token, columna_token))
+    except FileNotFoundError:
+        print(f"Error: No se encontró el archivo {archivo_path}")
+    except Exception as e:
+        print(f"Error leyendo el archivo: {e}")
+    
+    return tokens
+
+
+def analizar_sintacticamente_desde_archivo(archivo_tokens):
+    """Función principal para análisis sintáctico desde archivo"""
+    tokens = leer_tokens_desde_archivo(archivo_tokens)
+    
+    if not tokens:
+        print("No se pudieron leer tokens del archivo")
+        return False, None, []
+    
+    analizador = AnalizadorSintactico()
+    analizador.inicializar()
+    
+    exito, arbol = analizador.analizar(tokens)
+    errores = analizador.obtener_errores()
+    
+    return exito, arbol, errores

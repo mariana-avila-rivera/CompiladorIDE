@@ -63,12 +63,11 @@ class Toolbar:
             tokens_text = "TOKENIZADO:\n\n"
             for tipo, valor, linea, columna in tokens:
                 tokens_text += f"{tipo} ({linea}, {columna}): '{valor}'\n"
-            
-            # Añadir texto a la pestaña Léxico
+              # Añadir texto a la pestaña Léxico
             self.bottom_panels.add_text_to_tab("Léxico", tokens_text, clear=True)
 
     def analizar_sintactico(self):
-        """Analiza el código usando el analizador sintáctico y muestra los resultados en terminal y errores en panel"""
+        """Analiza el código usando el analizador sintáctico mejorado y muestra los resultados"""
         if not self.editor or not self.bottom_panels:
             return
         
@@ -79,6 +78,10 @@ class Toolbar:
             # Obtener los tokens del código usando el analizador léxico
             tokens = tokenizar_codigo(text_area)
             
+            if not tokens:
+                self.bottom_panels.add_text_to_tab("Errores Sintácticos", "No se pudieron obtener tokens del código", clear=True)
+                return
+            
             # Crear instancia del analizador sintáctico
             analizador = AnalizadorSintactico()
             
@@ -88,85 +91,77 @@ class Toolbar:
             # Realizar el análisis sintáctico
             exito, arbol_sintactico = analizador.analizar(tokens)
             
-            # Si hubo errores, crear lista de errores
-            if not exito:
-                errores = ["Error en el análisis sintáctico"]
-            else:
-                errores = []
+            # Obtener errores del analizador
+            errores = analizador.obtener_errores()
             
-            # Preparar texto para mostrar en terminal
-            resultado_terminal = "ANÁLISIS SINTÁCTICO:\n"
-            resultado_terminal += "=" * 50 + "\n\n"
-            
-            if errores:
-                resultado_terminal += "ERRORES ENCONTRADOS:\n"
-                for error in errores:
-                    resultado_terminal += f"- {error}\n"
-                resultado_terminal += "\n"
-            else:
-                resultado_terminal += "✓ Análisis sintáctico completado exitosamente\n\n"
-            
-            # Mostrar información del árbol si existe
-            if arbol_sintactico:
-                resultado_terminal += "ÁRBOL SINTÁCTICO GENERADO:\n"
-                resultado_terminal += f"Nodo raíz: {arbol_sintactico.valor}\n"
-                resultado_terminal += f"Número de hijos: {len(arbol_sintactico.hijos)}\n\n"
-            
-            # Mostrar en la terminal (consola)
-            print(resultado_terminal)
-            
-            # Preparar errores para mostrar en el panel izquierdo
+            # Mostrar errores en el panel izquierdo
             if errores:
                 errores_panel = "ERRORES SINTÁCTICOS ENCONTRADOS:\n\n"
-                for error in errores:
-                    # Extraer línea y columna del error si están disponibles
-                    if "línea" in error.lower() and "columna" in error.lower():
-                        errores_panel += f"Error sintáctico: {error}\n"
-                    else:
-                        errores_panel += f"Error sintáctico: {error}\n"
+                for i, error in enumerate(errores, 1):
+                    errores_panel += f"{i}. {error['tipo']}: {error['mensaje']}"
+                    if error['linea'] > 0:
+                        errores_panel += f" (Línea: {error['linea']}, Columna: {error['columna']})"
+                    errores_panel += "\n"
             else:
-                errores_panel = "No se encontraron errores sintácticos"
+                errores_panel = "✓ No se encontraron errores sintácticos"
             
             # Mostrar errores en la pestaña "Errores Sintácticos"
             self.bottom_panels.add_text_to_tab("Errores Sintácticos", errores_panel, clear=True)
             
-            # Preparar resultado del análisis para mostrar en la pestaña "Sintáctico"
-            resultado_analisis = "RESULTADO DEL ANÁLISIS SINTÁCTICO:\n\n"
-            
-            if errores:
-                resultado_analisis += f"Estado: ERRORES ENCONTRADOS ({len(errores)} errores)\n\n"
-                resultado_analisis += "Detalles de errores:\n"
-                for i, error in enumerate(errores, 1):
-                    resultado_analisis += f"{i}. {error}\n"
-            else:
-                resultado_analisis += "Estado: ANÁLISIS EXITOSO ✓\n\n"
-                if arbol_sintactico:
-                    resultado_analisis += "Árbol sintáctico generado correctamente\n"
-                    resultado_analisis += f"Estructura del programa analizada: {arbol_sintactico.valor}\n"
-            
-            resultado_analisis += f"\nTokens analizados: {len(tokens)}\n"
-            resultado_analisis += f"Tiempo de análisis: Completo\n"
-            
-            # Mostrar en la pestaña de análisis sintáctico
-            self.bottom_panels.add_text_to_tab("Sintáctico", resultado_analisis, clear=True)
-            
-            # Mostrar la pestaña de errores sintácticos en el panel izquierdo
+            # Mostrar errores en el panel izquierdo
             left_notebook = self.bottom_panels.left_notebook
             tabs = left_notebook.tabs()
-            
-            # Buscar el índice de la pestaña "Errores Sintácticos"
             for i, tab_id in enumerate(tabs):
                 if left_notebook.tab(tab_id, "text") == "Errores Sintácticos":
                     left_notebook.select(i)
                     break
-                    
+            
+            # Mostrar el árbol sintáctico en el panel derecho
+            if arbol_sintactico:
+                # Mostrar el árbol en el widget especializado
+                self.bottom_panels.show_syntactic_tree(arbol_sintactico)
+                
+                # Preparar información adicional
+                info_text = f"ANÁLISIS SINTÁCTICO COMPLETADO\n\n"
+                info_text += f"Estado: {'EXITOSO' if exito and not errores else 'CON ERRORES'}\n"
+                info_text += f"Tokens procesados: {len(tokens)}\n"
+                info_text += f"Errores encontrados: {len(errores)}\n"
+                if exito and not errores:
+                    info_text += "✓ Árbol sintáctico generado correctamente"
+                else:
+                    info_text += "⚠ Árbol sintáctico generado con errores"
+                
+                # Mostrar información adicional
+                self.bottom_panels.show_syntactic_info(info_text)
+            else:
+                # Si no hay árbol, mostrar mensaje
+                self.bottom_panels.get_tree_widget().mostrar_mensaje("No se pudo generar el árbol sintáctico")
+                
+                info_text = f"ANÁLISIS SINTÁCTICO FALLIDO\n\n"
+                info_text += f"Tokens procesados: {len(tokens)}\n"
+                info_text += f"Errores encontrados: {len(errores)}\n"
+                info_text += "✗ No se pudo generar el árbol sintáctico"
+                
+                self.bottom_panels.show_syntactic_info(info_text)
+            
+            # Información en consola
+            print(f"\nAnálisis sintáctico completado:")
+            print(f"- Tokens: {len(tokens)}")
+            print(f"- Errores: {len(errores)}")
+            print(f"- Árbol generado: {'Sí' if arbol_sintactico else 'No'}")
+            
         except Exception as e:
-            error_msg = f"Error durante el análisis sintáctico: {str(e)}"
+            error_msg = f"Error crítico durante el análisis sintáctico: {str(e)}"
             print(f"ERROR: {error_msg}")
             
-            # Mostrar error en el panel
+            # Mostrar error en los paneles
             self.bottom_panels.add_text_to_tab("Errores Sintácticos", f"ERROR CRÍTICO:\n{error_msg}", clear=True)
-            self.bottom_panels.add_text_to_tab("Sintáctico", f"ERROR CRÍTICO:\n{error_msg}", clear=True)
+            if self.bottom_panels.get_tree_widget():
+                self.bottom_panels.get_tree_widget().mostrar_mensaje("Error crítico en el análisis")
+            
+            # Mostrar información de error
+            info_text = f"ERROR CRÍTICO EN EL ANÁLISIS\n\n{error_msg}"
+            self.bottom_panels.show_syntactic_info(info_text)
 
     def create_toolbar(self):
         self.toolbar_frame = tk.Frame(self.root) # Asigna el Frame a self.toolbar_frame
