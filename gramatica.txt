@@ -1,4 +1,4 @@
-programa → main { lista_declaracion }
+programa → main { lista_declaracion } ;
 
 lista_declaracion → declaracion lista_declaracion | ε
 
@@ -26,6 +26,7 @@ seleccion_aux → else lista_sentencias end | end
 iteracion → while ( expresion ) lista_sentencias end
 
 repeticion → do lista_sentencias until ( expresion ) ;
+           | do lista_sentencias while ( expresion ) lista_sentencias end
 
 sent_in → cin >> id ;
 

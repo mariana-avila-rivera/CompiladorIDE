@@ -11,7 +11,7 @@ class AnalizadorSintactico:
     def _definir_gramatica(self):
         """Define las reglas de la gramática"""
         return {
-            'programa': [['main', '{', 'lista_declaracion', '}']],
+            'programa': [['main', '{', 'lista_declaracion', '}', ';']],
             'lista_declaracion': [
                 ['declaracion', 'lista_declaracion'],
                 ['ε']
@@ -43,7 +43,10 @@ class AnalizadorSintactico:
                 ['end']
             ],
             'iteracion': [['while', '(', 'expresion', ')', 'lista_sentencias', 'end']],
-            'repeticion': [['do', 'lista_sentencias', 'until', '(', 'expresion', ')', ';']],
+            'repeticion': [
+                ['do', 'lista_sentencias', 'until', '(', 'expresion', ')', ';'],
+                ['do', 'lista_sentencias', 'while', '(', 'expresion', ')', 'lista_sentencias', 'end']
+            ],
             'sent_in': [['cin', '>>', 'id', ';']],
             'sent_out': [['cout', '<<', 'lista_salida', ';']],
             'lista_salida': [['elemento_salida', 'lista_salida_aux']],
@@ -106,6 +109,9 @@ class AnalizadorSintactico:
         # Inicializar conjuntos PRIMEROS
         for simbolo in self.no_terminales | self.terminales:
             self.primeros[simbolo] = set()
+        
+        # Inicializar PRIMEROS para epsilon
+        self.primeros['ε'] = {'ε'}
         
         # PRIMEROS de terminales
         for terminal in self.terminales:
@@ -182,8 +188,7 @@ class AnalizadorSintactico:
                 
                 # Agregar PRIMEROS(β) - {ε} a SIGUIENTES(A)
                 self.siguientes[simbolo].update(primeros_beta - {'ε'})
-                
-                # Si ε ∈ PRIMEROS(β), agregar SIGUIENTES(no_terminal) a SIGUIENTES(A)
+                  # Si ε ∈ PRIMEROS(β), agregar SIGUIENTES(no_terminal) a SIGUIENTES(A)
                 if 'ε' in primeros_beta or not beta:
                     self.siguientes[simbolo].update(self.siguientes[no_terminal])
     
@@ -195,6 +200,14 @@ class AnalizadorSintactico:
         resultado = set()
         
         for simbolo in cadena:
+            # Verificar si el símbolo existe en primeros
+            if simbolo not in self.primeros:
+                if simbolo == 'ε':
+                    self.primeros[simbolo] = {'ε'}
+                else:
+                    # Si es un terminal no reconocido, agregarlo
+                    self.primeros[simbolo] = {simbolo}
+            
             primeros_simbolo = self.primeros[simbolo] - {'ε'}
             resultado.update(primeros_simbolo)
             
