@@ -1,3 +1,5 @@
+import json
+
 def resaltar_palabras(text_area):
     # Limpiar todos los tags existentes
     for tag in text_area.tag_names():
@@ -278,6 +280,24 @@ def obtener_palabra_completa(text_area, pos):
 
     return word, pos
 
+def generar_json_tokens(tokens, archivo_salida):
+    """
+    Genera un archivo JSON con la información de los tokens encontrados.
+    Cada token incluye su tipo, valor, línea y columna.
+    """
+    tokens_json = []
+    for token in tokens:
+        token_info = {
+            "tipo": token[0],
+            "valor": token[1],
+            "linea": token[2],
+            "columna": token[3]
+        }
+        tokens_json.append(token_info)
+    
+    with open(archivo_salida, 'w', encoding='utf-8') as f:
+        json.dump(tokens_json, f, indent=4, ensure_ascii=False)
+
 def tokenizar_codigo(text_area):
     """
     Analiza el texto en el área de texto y genera una lista de tokens encontrados.
@@ -531,6 +551,9 @@ def tokenizar_codigo(text_area):
         # Si no reconocimos ningún token, avanzamos
         if not token_reconocido:
             pos = text_area.index(f"{pos}+1c")
+    
+    # Generar el archivo JSON con los tokens
+    generar_json_tokens(tokens, "tokens.json")
     
     return tokens
 
