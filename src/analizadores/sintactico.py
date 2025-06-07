@@ -292,6 +292,9 @@ class AnalizadorSintactico:
             if tope in self.terminales:
                 if tope == token_actual or self._tokens_coinciden(tope, token_actual, tipo_token):
                     pila.pop()
+                    # Asociar info de token al nodo hoja
+                    token_info = {'tipo': tipo_token, 'linea': linea, 'columna': columna}
+                    nodo_actual.token_info = token_info
                     pila_nodos.pop()
                     indice += 1
                     print(f"Coincide {tope}")
@@ -502,10 +505,11 @@ class AnalizadorSintactico:
 
 class NodoArbol:
     """Nodo para construir el árbol sintáctico"""
-    def __init__(self, valor):
+    def __init__(self, valor, token_info=None):
         self.valor = valor
         self.hijos = []
         self.padre = None
+        self.token_info = token_info  # Diccionario con tipo, linea, columna si es un token
     
     def agregar_hijo(self, hijo):
         hijo.padre = self
@@ -549,10 +553,13 @@ class TreeVisualizationWidget:
         v_scrollbar = ttk.Scrollbar(self.tree_frame, orient=tk.VERTICAL)
         h_scrollbar = ttk.Scrollbar(self.tree_frame, orient=tk.HORIZONTAL)
         
-        # Treeview
-        self.tree = ttk.Treeview(self.tree_frame, 
-                                yscrollcommand=v_scrollbar.set,
-                                xscrollcommand=h_scrollbar.set)
+        # Treeview con columnas
+        self.tree = ttk.Treeview(
+            self.tree_frame,
+            columns=("tipo", "linea", "columna"),
+            yscrollcommand=v_scrollbar.set,
+            xscrollcommand=h_scrollbar.set
+        )
         
         # Configurar scrollbars
         v_scrollbar.config(command=self.tree.yview)
@@ -568,8 +575,14 @@ class TreeVisualizationWidget:
         self.tree_frame.grid_columnconfigure(0, weight=1)
         
         # Configurar columnas del treeview
-        self.tree.heading('#0', text='Árbol Sintáctico', anchor='w')
+        self.tree.heading('#0', text='Árbol Sintáctico Abstracto (AST)', anchor='w')
+        self.tree.heading('tipo', text='Tipo de token', anchor='w')
+        self.tree.heading('linea', text='Línea', anchor='w')
+        self.tree.heading('columna', text='Columna', anchor='w')
         self.tree.column('#0', width=300, minwidth=100)
+        self.tree.column('tipo', width=120, minwidth=60)
+        self.tree.column('linea', width=60, minwidth=40)
+        self.tree.column('columna', width=70, minwidth=40)
         
         # Etiqueta para mostrar cuando no hay árbol
         self.no_tree_label = tk.Label(self.main_frame, 
@@ -600,13 +613,25 @@ class TreeVisualizationWidget:
     
     def _agregar_nodo_al_tree(self, nodo, parent_id):
         """Recursivamente agrega nodos al treeview"""
+        # Extraer info de token si está disponible
+        tipo = getattr(nodo, 'token_tipo', None)
+        linea = getattr(nodo, 'token_linea', None)
+        columna = getattr(nodo, 'token_columna', None)
+        # Si es NodoArbol, buscar en token_info
+        if hasattr(nodo, 'token_info') and nodo.token_info:
+            tipo = nodo.token_info.get('tipo')
+            linea = nodo.token_info.get('linea')
+            columna = nodo.token_info.get('columna')
         # Insertar el nodo actual
-        node_id = self.tree.insert(parent_id, 'end', text=nodo.valor, open=True)
-        
+        node_id = self.tree.insert(
+            parent_id, 'end',
+            text=nodo.valor if hasattr(nodo, 'valor') else nodo.tipo,
+            values=(tipo if tipo else '', linea if linea else '', columna if columna else ''),
+            open=True
+        )
         # Agregar hijos
-        for hijo in nodo.hijos:
+        for hijo in getattr(nodo, 'hijos', []):
             self._agregar_nodo_al_tree(hijo, node_id)
-        
         return node_id
     
     def _expandir_todos(self):
@@ -636,13 +661,309 @@ class TreeVisualizationWidget:
         self.mostrar_mensaje("No hay árbol sintáctico para mostrar")
 
 
+class NodoAST:
+    """Nodo para el Árbol Sintáctico Abstracto (AST)"""
+    def __init__(self, tipo, valor=None, hijos=None, token_tipo=None, token_linea=None, token_columna=None):
+        self.tipo = tipo  # Tipo de nodo (ej: 'Programa', 'Declaracion', 'Expresion', etc.)
+        self.valor = valor  # Valor del nodo (ej: nombre de variable, operador, etc.)
+        self.hijos = hijos if hijos is not None else []
+        self.atributos = {}  # Diccionario para atributos adicionales (tipo, línea, columna, etc.)
+        # Nuevos atributos estándar para token
+        self.token_tipo = token_tipo
+        self.token_linea = token_linea
+        self.token_columna = token_columna
+
+    def agregar_hijo(self, hijo):
+        self.hijos.append(hijo)
+
+    def agregar_atributo(self, nombre, valor):
+        self.atributos[nombre] = valor
+
+    def mostrar_arbol(self, nivel=0, prefijo=""):
+        """Muestra el árbol de forma visual"""
+        # Construir la representación del nodo
+        nodo_str = f"{self.tipo}"
+        if self.valor is not None:
+            nodo_str += f": {self.valor}"
+        
+        # Mostrar atributos si existen
+        if self.atributos:
+            attrs = ", ".join(f"{k}={v}" for k, v in self.atributos.items())
+            nodo_str += f" [{attrs}]"
+        
+        print(f"{prefijo}{'└── ' if nivel > 0 else ''}{nodo_str}")
+        
+        # Mostrar hijos
+        for i, hijo in enumerate(self.hijos):
+            es_ultimo = i == len(self.hijos) - 1
+            nuevo_prefijo = prefijo + ("    " if nivel > 0 and es_ultimo else "│   " if nivel > 0 else "")
+            hijo.mostrar_arbol(nivel + 1, nuevo_prefijo)
+
+    def to_dict(self):
+        """Convierte el nodo y sus hijos a un diccionario para facilitar la visualización"""
+        return {
+            'tipo': self.tipo,
+            'valor': self.valor,
+            'atributos': self.atributos,
+            'hijos': [hijo.to_dict() for hijo in self.hijos]
+        }
+
+class ASTBuilder:
+    """Constructor del Árbol Sintáctico Abstracto"""
+    def __init__(self):
+        self.arbol = None
+
+    def construir_ast(self, arbol_sintactico):
+        """Convierte el árbol sintáctico en un AST"""
+        if not arbol_sintactico:
+            return None
+        
+        # Crear nodo raíz del programa
+        self.arbol = NodoAST('Programa')
+        
+        # Procesar el árbol sintáctico
+        self._procesar_nodo(arbol_sintactico, self.arbol)
+        
+        return self.arbol
+
+    def _procesar_nodo(self, nodo_sintactico, nodo_ast):
+        """Procesa un nodo del árbol sintáctico y lo convierte en nodo AST"""
+        if not nodo_sintactico:
+            return
+
+        # Mapeo de tipos de nodos sintácticos a tipos AST
+        mapeo_tipos = {
+            'programa': self._procesar_programa,
+            'lista_declaracion': self._procesar_lista_declaraciones,
+            'declaracion': self._procesar_declaracion,
+            'declaracion_variable': self._procesar_declaracion_variable,
+            'sentencia': self._procesar_sentencia,
+            'seleccion': self._procesar_seleccion,
+            'iteracion': self._procesar_iteracion,
+            'repeticion': self._procesar_repeticion,
+            'sent_in': self._procesar_entrada,
+            'sent_out': self._procesar_salida,
+            'asignacion': self._procesar_asignacion,
+            'expresion': self._procesar_expresion,
+            'expresion_simple': self._procesar_expresion_simple,
+            'termino': self._procesar_termino,
+            'componente': self._procesar_componente
+        }
+
+        # Obtener el procesador correspondiente al tipo de nodo
+        procesador = mapeo_tipos.get(nodo_sintactico.valor.lower())
+        if procesador:
+            procesador(nodo_sintactico, nodo_ast)
+        else:
+            # Si no hay procesador específico, procesar los hijos
+            for hijo in nodo_sintactico.hijos:
+                self._procesar_nodo(hijo, nodo_ast)
+
+    def _procesar_programa(self, nodo, padre_ast):
+        """Procesa el nodo programa"""
+        for hijo in nodo.hijos:
+            if hijo.valor == 'lista_declaracion':
+                self._procesar_nodo(hijo, padre_ast)
+
+    def _procesar_lista_declaraciones(self, nodo, padre_ast):
+        """Procesa la lista de declaraciones"""
+        for hijo in nodo.hijos:
+            if hijo.valor != 'ε':
+                self._procesar_nodo(hijo, padre_ast)
+
+    def _procesar_declaracion(self, nodo, padre_ast):
+        """Procesa una declaración"""
+        for hijo in nodo.hijos:
+            self._procesar_nodo(hijo, padre_ast)
+
+    def _procesar_declaracion_variable(self, nodo, padre_ast):
+        """Procesa una declaración de variable"""
+        tipo = None
+        variables = []
+        
+        for hijo in nodo.hijos:
+            if hijo.valor in ['int', 'float', 'bool']:
+                tipo = hijo.valor
+            elif hijo.valor == 'lista_identificadores':
+                for var in hijo.hijos:
+                    if var.valor == 'id':
+                        variables.append(var.hijos[0].valor)
+        
+        for var in variables:
+            nodo_var = NodoAST(tipo)  # Usar el tipo como nombre del nodo
+            nodo_var.agregar_atributo('nombre', var)
+            padre_ast.agregar_hijo(nodo_var)
+
+    def _procesar_sentencia(self, nodo, padre_ast):
+        """Procesa una sentencia"""
+        for hijo in nodo.hijos:
+            self._procesar_nodo(hijo, padre_ast)
+
+    def _procesar_seleccion(self, nodo, padre_ast):
+        """Procesa una sentencia if-then-else"""
+        nodo_if = NodoAST('if')  # Usar 'if' como nombre del nodo
+        
+        # Procesar condición
+        for hijo in nodo.hijos:
+            if hijo.valor == 'expresion':
+                condicion = NodoAST('condicion')
+                self._procesar_nodo(hijo, condicion)
+                nodo_if.agregar_hijo(condicion)
+            elif hijo.valor == 'lista_sentencias':
+                cuerpo = NodoAST('then')
+                self._procesar_nodo(hijo, cuerpo)
+                nodo_if.agregar_hijo(cuerpo)
+            elif hijo.valor == 'seleccion_aux':
+                for subhijo in hijo.hijos:
+                    if subhijo.valor == 'else':
+                        else_cuerpo = NodoAST('else')
+                        self._procesar_nodo(subhijo.hijos[0], else_cuerpo)
+                        nodo_if.agregar_hijo(else_cuerpo)
+        
+        padre_ast.agregar_hijo(nodo_if)
+
+    def _procesar_iteracion(self, nodo, padre_ast):
+        """Procesa una sentencia while"""
+        nodo_while = NodoAST('while')  # Usar 'while' como nombre del nodo
+        
+        for hijo in nodo.hijos:
+            if hijo.valor == 'expresion':
+                condicion = NodoAST('condicion')
+                self._procesar_nodo(hijo, condicion)
+                nodo_while.agregar_hijo(condicion)
+            elif hijo.valor == 'lista_sentencias':
+                cuerpo = NodoAST('cuerpo')
+                self._procesar_nodo(hijo, cuerpo)
+                nodo_while.agregar_hijo(cuerpo)
+        
+        padre_ast.agregar_hijo(nodo_while)
+
+    def _procesar_repeticion(self, nodo, padre_ast):
+        """Procesa una sentencia do-while o do-until"""
+        # Determinar el tipo de repetición
+        tipo_rep = 'until' if 'until' in [h.valor for h in nodo.hijos] else 'while'
+        nodo_rep = NodoAST('do-' + tipo_rep)  # Usar 'do-while' o 'do-until' como nombre
+        
+        for hijo in nodo.hijos:
+            if hijo.valor == 'expresion':
+                condicion = NodoAST('condicion')
+                self._procesar_nodo(hijo, condicion)
+                nodo_rep.agregar_hijo(condicion)
+            elif hijo.valor == 'lista_sentencias':
+                cuerpo = NodoAST('cuerpo')
+                self._procesar_nodo(hijo, cuerpo)
+                nodo_rep.agregar_hijo(cuerpo)
+        
+        padre_ast.agregar_hijo(nodo_rep)
+
+    def _procesar_entrada(self, nodo, padre_ast):
+        """Procesa una sentencia de entrada (cin)"""
+        nodo_entrada = NodoAST('cin')  # Usar 'cin' como nombre del nodo
+        
+        for hijo in nodo.hijos:
+            if hijo.valor == 'id':
+                nodo_entrada.agregar_atributo('variable', hijo.hijos[0].valor)
+        
+        padre_ast.agregar_hijo(nodo_entrada)
+
+    def _procesar_salida(self, nodo, padre_ast):
+        """Procesa una sentencia de salida (cout)"""
+        nodo_salida = NodoAST('cout')  # Usar 'cout' como nombre del nodo
+        
+        for hijo in nodo.hijos:
+            if hijo.valor == 'lista_salida':
+                for elemento in hijo.hijos:
+                    if elemento.valor == 'elemento_salida':
+                        self._procesar_nodo(elemento, nodo_salida)
+        
+        padre_ast.agregar_hijo(nodo_salida)
+
+    def _procesar_asignacion(self, nodo, padre_ast):
+        """Procesa una asignación"""
+        operador = '='  # Operador por defecto
+        variable = None
+        
+        for hijo in nodo.hijos:
+            if hijo.valor == 'id':
+                variable = hijo.hijos[0].valor
+            elif hijo.valor == 'asignacion_op':
+                for op in hijo.hijos:
+                    if op.valor in ['=', '+=', '-=', '*=', '/=', '%=', '^=']:
+                        operador = op.valor
+                    elif op.valor in ['++', '--']:
+                        operador = op.valor
+                    elif op.valor == 'expresion':
+                        nodo_asig = NodoAST(operador)
+                        nodo_asig.agregar_atributo('variable', variable)
+                        self._procesar_nodo(op, nodo_asig)
+                        padre_ast.agregar_hijo(nodo_asig)
+
+    def _procesar_expresion(self, nodo, padre_ast):
+        """Procesa una expresión"""
+        if len(nodo.hijos) == 1:
+            self._procesar_nodo(nodo.hijos[0], padre_ast)
+        else:
+            operador = nodo.hijos[1].valor
+            nodo_exp = NodoAST(operador)
+            self._procesar_nodo(nodo.hijos[0], nodo_exp)
+            self._procesar_nodo(nodo.hijos[2], nodo_exp)
+            padre_ast.agregar_hijo(nodo_exp)
+
+    def _procesar_expresion_simple(self, nodo, padre_ast):
+        """Procesa una expresión simple"""
+        if len(nodo.hijos) == 1:
+            self._procesar_nodo(nodo.hijos[0], padre_ast)
+        else:
+            operador = nodo.hijos[1].valor
+            nodo_exp = NodoAST(operador)
+            self._procesar_nodo(nodo.hijos[0], nodo_exp)
+            self._procesar_nodo(nodo.hijos[2], nodo_exp)
+            padre_ast.agregar_hijo(nodo_exp)
+
+    def _procesar_termino(self, nodo, padre_ast):
+        """Procesa un término"""
+        if len(nodo.hijos) == 1:
+            self._procesar_nodo(nodo.hijos[0], padre_ast)
+        else:
+            operador = nodo.hijos[1].valor
+            nodo_term = NodoAST(operador)
+            self._procesar_nodo(nodo.hijos[0], nodo_term)
+            self._procesar_nodo(nodo.hijos[2], nodo_term)
+            padre_ast.agregar_hijo(nodo_term)
+
+    def _procesar_componente(self, nodo, padre_ast):
+        """Procesa un componente"""
+        if len(nodo.hijos) == 1:
+            hijo = nodo.hijos[0]
+            if hijo.valor == 'id':
+                # Buscar información de token si está disponible
+                token_info = getattr(hijo, 'token_info', None)
+                if token_info:
+                    nodo_comp = NodoAST(hijo.hijos[0].valor, token_tipo=token_info.get('tipo'), token_linea=token_info.get('linea'), token_columna=token_info.get('columna'))
+                else:
+                    nodo_comp = NodoAST(hijo.hijos[0].valor)
+                padre_ast.agregar_hijo(nodo_comp)
+            elif hijo.valor == 'numero':
+                token_info = getattr(hijo, 'token_info', None)
+                if token_info:
+                    nodo_comp = NodoAST(hijo.hijos[0].valor, token_tipo=token_info.get('tipo'), token_linea=token_info.get('linea'), token_columna=token_info.get('columna'))
+                else:
+                    nodo_comp = NodoAST(hijo.hijos[0].valor)
+                padre_ast.agregar_hijo(nodo_comp)
+            elif hijo.valor == 'booleano':
+                token_info = getattr(hijo, 'token_info', None)
+                if token_info:
+                    nodo_comp = NodoAST(hijo.hijos[0].valor, token_tipo=token_info.get('tipo'), token_linea=token_info.get('linea'), token_columna=token_info.get('columna'))
+                else:
+                    nodo_comp = NodoAST(hijo.hijos[0].valor)
+                padre_ast.agregar_hijo(nodo_comp)
+        else:
+            self._procesar_nodo(nodo.hijos[1], padre_ast)
+
 def analizar_sintacticamente(tokens):
     """Función principal para análisis sintáctico"""
     analizador = AnalizadorSintactico()
     analizador.inicializar()
-    
-    # Mostrar conjuntos (opcional)
-    # analizador.mostrar_conjuntos()
     
     exito, arbol = analizador.analizar(tokens)
     
@@ -651,9 +972,19 @@ def analizar_sintacticamente(tokens):
         print("ÁRBOL SINTÁCTICO:")
         print("="*50)
         arbol.mostrar_arbol()
-        return True, arbol
+        
+        # Construir el AST
+        ast_builder = ASTBuilder()
+        ast = ast_builder.construir_ast(arbol)
+        
+        print("\n" + "="*50)
+        print("ÁRBOL SINTÁCTICO ABSTRACTO (AST):")
+        print("="*50)
+        ast.mostrar_arbol()
+        
+        return True, arbol, ast
     else:
-        return False, None
+        return False, None, None
 
 def leer_tokens_desde_archivo(archivo_path):
     """Lee tokens desde un archivo de texto con formato: tipo lexema linea columna"""
@@ -693,7 +1024,7 @@ def analizar_sintacticamente_desde_archivo(archivo_tokens):
     
     if not tokens:
         print("No se pudieron leer tokens del archivo")
-        return False, None, []
+        return False, None, None, []
     
     analizador = AnalizadorSintactico()
     analizador.inicializar()
@@ -701,4 +1032,10 @@ def analizar_sintacticamente_desde_archivo(archivo_tokens):
     exito, arbol = analizador.analizar(tokens)
     errores = analizador.obtener_errores()
     
-    return exito, arbol, errores
+    if exito:
+        # Construir el AST
+        ast_builder = ASTBuilder()
+        ast = ast_builder.construir_ast(arbol)
+        return exito, arbol, ast, errores
+    else:
+        return exito, arbol, None, errores
