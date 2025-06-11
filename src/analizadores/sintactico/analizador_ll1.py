@@ -48,14 +48,15 @@ class AnalizadorLL1:
                 break
             
             print(f"{str(pila):<30} {token_actual:<20}", end=" ")
-            
-            # Si el tope es terminal
+              # Si el tope es terminal
             if tope in self.terminales:
                 if tope == token_actual or self._tokens_coinciden(tope, token_actual, tipo_token):
                     pila.pop()
-                    # Asociar info de token al nodo hoja
+                    # Asociar info de token al nodo hoja y cambiar el valor del nodo al lexema real
                     token_info = {'tipo': tipo_token, 'linea': linea, 'columna': columna}
                     nodo_actual.token_info = token_info
+                    # Cambiar el valor del nodo al lexema real del token (especialmente importante para números)
+                    nodo_actual.valor = token_actual
                     pila_nodos.pop()
                     indice += 1
                     print(f"Coincide {tope}")
