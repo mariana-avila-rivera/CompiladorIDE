@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext
-from analizadores.sintactico import TreeVisualizationWidget
+from analizadores.sintactico import TreeVisualizationWidget, ASTBuilder
 
 
 class BottomPanels:
@@ -8,6 +8,7 @@ class BottomPanels:
         self.parent = parent
         self.text_widgets = {}  # Diccionario para almacenar los widgets de texto
         self.tree_widget = None  # Widget para el árbol sintáctico
+        self.ast_builder = ASTBuilder()  # Instancia del constructor de AST
         self.create_panels()
 
     def create_panels(self):
@@ -97,8 +98,34 @@ class BottomPanels:
     
     def show_syntactic_tree(self, tree_root):
         """Mostrar el árbol sintáctico en la pestaña correspondiente"""
-        if self.tree_widget:
-            self.tree_widget.mostrar_arbol(tree_root)
+        if self.tree_widget and tree_root:
+            # AQUÍ ESTÁ LA CLAVE: Procesar el árbol sintáctico crudo con el AST Builder
+            try:
+                print("Procesando árbol sintáctico crudo...")
+                print(f"Árbol recibido: {tree_root.valor if hasattr(tree_root, 'valor') else tree_root}")
+                
+                # Construir AST limpio a partir del árbol sintáctico crudo
+                ast_procesado = self.ast_builder.construir_ast(tree_root)
+                
+                if ast_procesado:
+                    print("AST procesado exitosamente")
+                    # Mostrar el AST procesado en lugar del árbol crudo
+                    self.tree_widget.mostrar_arbol(ast_procesado)
+                    
+                    # Mostrar información adicional
+                    info_text = "Análisis sintáctico completado exitosamente.\nÁrbol procesado y filtrado."
+                    self.show_syntactic_info(info_text)
+                else:
+                    print("Error: AST procesado es None")
+                    # Si falla el procesamiento, mostrar el árbol original
+                    self.tree_widget.mostrar_arbol(tree_root)
+                    self.show_syntactic_info("Árbol sintáctico mostrado sin procesar.")
+                    
+            except Exception as e:
+                print(f"Error procesando AST: {e}")
+                # En caso de error, mostrar el árbol original
+                self.tree_widget.mostrar_arbol(tree_root)
+                self.show_syntactic_info(f"Error procesando AST: {e}")
             
             # Cambiar a la pestaña sintáctica
             tabs = self.right_notebook.tabs()
