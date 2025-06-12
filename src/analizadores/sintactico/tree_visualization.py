@@ -49,7 +49,7 @@ class TreeVisualizationWidget:
         # Configurar grid weights
         self.tree_frame.grid_rowconfigure(0, weight=1)
         self.tree_frame.grid_columnconfigure(0, weight=1)        # Configurar columnas del treeview
-        self.tree.heading('#0', text='Árbol Sintáctico (Solo Terminales)', anchor='w')
+        self.tree.heading('#0', text='Estructura del Programa (Terminales Organizados)', anchor='w')
         self.tree.heading('tipo', text='Tipo de token', anchor='w')
         self.tree.heading('linea', text='Línea', anchor='w')
         self.tree.heading('columna', text='Columna', anchor='w')
@@ -74,14 +74,12 @@ class TreeVisualizationWidget:
             self.tree.delete(item)
         
         # Ocultar etiqueta de "no hay árbol"
-        self.no_tree_label.pack_forget()
-          # Mostrar el treeview
+        self.no_tree_label.pack_forget()        # Mostrar el treeview
         self.tree_frame.pack(fill=tk.BOTH, expand=True)
         
         # Agregar nodos al árbol
         self._agregar_nodo_al_tree(nodo_raiz, '')
-        
-        # Expandir todos los nodos inicialmente
+          # Expandir todos los nodos inicialmente
         self._expandir_todos()
     
     def _agregar_nodo_al_tree(self, nodo, parent_id):
@@ -96,65 +94,52 @@ class TreeVisualizationWidget:
         # Verificar si el nodo es terminal (hoja del árbol)
         hijos = getattr(nodo, 'hijos', [])
         es_terminal = len(hijos) == 0
-        
-        # Si es terminal, agregarlo directamente
+          # Si es terminal, agregarlo directamente
         if es_terminal:
-            # Extraer info de token si está disponible
-            tipo = getattr(nodo, 'token_tipo', None)
-            linea = getattr(nodo, 'token_linea', None)
-            columna = getattr(nodo, 'token_columna', None)
-            
-            # Si es NodoArbol, buscar en token_info
-            if hasattr(nodo, 'token_info') and nodo.token_info:
-                tipo = nodo.token_info.get('tipo')
-                linea = nodo.token_info.get('linea')
-                columna = nodo.token_info.get('columna')
-            
-            # Insertar el nodo terminal
-            node_id = self.tree.insert(
-                parent_id, 'end',
-                text=valor_nodo,
-                values=(tipo if tipo else '', linea if linea else '', columna if columna else ''),
-                open=True
-            )
-            return node_id
+            return self._crear_nodo_terminal(nodo, parent_id)
         else:
-            # Recopilar todos los terminales de este subárbol
-            terminales = self._recopilar_terminales(nodo)
+            # Aplicar la nueva lógica simplificada
+            return self._procesar_nodo_no_terminal(nodo, parent_id)
+    
+    def _procesar_nodo_no_terminal(self, nodo, parent_id):
+        """Procesa un nodo no terminal creando jerarquías apropiadas"""
+        valor_nodo = nodo.valor if hasattr(nodo, 'valor') else nodo.tipo
+        hijos = getattr(nodo, 'hijos', [])
+        
+        # Definir categorías de nodos que deben ser raíces
+        operadores_aritmeticos = ['+', '-', '*', '/', '%', '^']
+        operadores_relacionales = ['<', '>', '<=', '>=', '==', '!=']
+        operadores_asignacion = ['=', '+=', '-=', '*=', '/=']
+        operadores_logicos = ['&&', '||', '!']
+        tipos_datos = ['int', 'float', 'bool', 'string', 'char', 'double']
+        palabras_clave = ['main', 'if', 'else', 'while', 'for', 'do', 'switch', 'case', 'default']
+        entrada_salida = ['cout', 'cin', '<<', '>>']
+        
+        # Recopilar todos los terminales de este subárbol
+        terminales = self._recopilar_terminales(nodo)
+        
+        # Buscar el terminal más importante para ser raíz
+        nodo_raiz = self._encontrar_nodo_raiz(terminales, {
+            'main': palabras_clave,
+            'tipos': tipos_datos,
+            'asignacion': operadores_asignacion,
+            'aritmeticos': operadores_aritmeticos,
+            'relacionales': operadores_relacionales,
+            'logicos': operadores_logicos,
+            'io': entrada_salida
+        })
+        
+        if nodo_raiz:
+            # Crear el nodo raíz
+            root_id = self._crear_nodo_terminal(nodo_raiz, parent_id)
             
-            # Si no hay terminales, no hacer nada
-            if not terminales:
-                return parent_id
+            # Organizar los demás terminales bajo la raíz según contexto
+            self._organizar_terminales_bajo_raiz(nodo_raiz, terminales, root_id, hijos)
             
-            # Crear estructura según el tipo de nodo
-            if valor_nodo == 'programa':
-                # Para programa, no crear nodo, solo procesar hijos
-                for hijo in hijos:
-                    self._agregar_nodo_al_tree(hijo, parent_id)
-                return parent_id
-            elif valor_nodo in ['declaracion_variable', 'asignacion', 'seleccion', 'iteracion', 'sent_out', 'expresion_simple', 'termino']:
-                # Para estos nodos, crear agrupación con el primer terminal significativo
-                terminal_principal = self._encontrar_terminal_principal(terminales, valor_nodo)
-                if terminal_principal:
-                    node_id = self._crear_nodo_terminal(terminal_principal, parent_id)
-                    # Agregar otros terminales como hijos
-                    for terminal in terminales:
-                        if terminal != terminal_principal:
-                            self._crear_nodo_terminal(terminal, node_id)
-                    return node_id
-                else:
-                    # Si no hay terminal principal, agregar todos como hermanos
-                    for terminal in terminales:
-                        self._crear_nodo_terminal(terminal, parent_id)
-                    return parent_id
-            else:
-                # Para otros nodos, agregar terminales directamente o procesar hijos
-                if len(terminales) == 1:
-                    return self._crear_nodo_terminal(terminales[0], parent_id)
-                else:
-                    for hijo in hijos:
-                        self._agregar_nodo_al_tree(hijo, parent_id)
-                    return parent_id
+            return root_id
+        else:
+            # Si no hay un nodo clave claro, usar estrategia de fallback
+            return self._procesar_como_grupo(hijos, parent_id)
     
     def _recopilar_terminales(self, nodo):
         """Recopila todos los nodos terminales de un subárbol"""
@@ -173,42 +158,6 @@ class TreeVisualizationWidget:
         
         recopilar_recursivo(nodo)
         return terminales
-    
-    def _encontrar_terminal_principal(self, terminales, tipo_nodo):
-        """Encuentra el terminal principal para usar como nodo agrupador"""
-        if not terminales:
-            return None
-        
-        # Para asignaciones, buscar el operador
-        if tipo_nodo == 'asignacion':
-            for terminal in terminales:
-                valor = getattr(terminal, 'valor', '')
-                if valor in ['=', '+=', '-=', '*=', '/=', '++', '--']:
-                    return terminal
-        
-        # Para declaraciones de variable, buscar el tipo
-        elif tipo_nodo == 'declaracion_variable':
-            for terminal in terminales:
-                valor = getattr(terminal, 'valor', '')
-                if valor in ['int', 'float', 'bool']:
-                    return terminal
-        
-        # Para selecciones, buscar if
-        elif tipo_nodo == 'seleccion':
-            for terminal in terminales:
-                valor = getattr(terminal, 'valor', '')
-                if valor == 'if':
-                    return terminal
-        
-        # Para expresiones con operadores
-        elif tipo_nodo in ['expresion_simple', 'termino']:
-            for terminal in terminales:
-                valor = getattr(terminal, 'valor', '')
-                if valor in ['+', '-', '*', '/', '%', '^', '<', '>', '<=', '>=', '==', '!=']:
-                    return terminal
-        
-        # Si no se encuentra terminal principal específico, usar el primero
-        return terminales[0] if terminales else None
     
     def _crear_nodo_terminal(self, terminal, parent_id):
         """Crea un nodo terminal en el árbol"""
@@ -259,3 +208,118 @@ class TreeVisualizationWidget:
             for item in self.tree.get_children():
                 self.tree.delete(item)
         self.mostrar_mensaje("No hay árbol sintáctico para mostrar")
+    
+    def _encontrar_nodo_raiz(self, terminales, categorias):
+        """Encuentra el terminal más importante para ser raíz según prioridades"""
+        # Orden de prioridad (de mayor a menor importancia)
+        prioridades = ['main', 'tipos', 'asignacion', 'aritmeticos', 'relacionales', 'logicos', 'io']
+        
+        for prioridad in prioridades:
+            if prioridad in categorias:
+                for terminal in terminales:
+                    valor = getattr(terminal, 'valor', '')
+                    if valor in categorias[prioridad]:
+                        return terminal
+        return None
+    
+    def _organizar_terminales_bajo_raiz(self, nodo_raiz, terminales, root_id, hijos_originales):
+        """Organiza los terminales restantes bajo el nodo raíz de manera inteligente"""
+        valor_raiz = getattr(nodo_raiz, 'valor', '')
+        
+        # Filtrar terminales (excluir el que ya es raíz y épsilon)
+        otros_terminales = []
+        for terminal in terminales:
+            valor_terminal = getattr(terminal, 'valor', '')
+            if valor_terminal != valor_raiz and valor_terminal != 'ε':
+                otros_terminales.append(terminal)
+        
+        # Lógica específica por tipo de raíz
+        if valor_raiz == 'main':
+            self._organizar_main(otros_terminales, root_id, hijos_originales)
+        elif valor_raiz in ['int', 'float', 'bool', 'string', 'char', 'double']:
+            self._organizar_declaracion_tipo(otros_terminales, root_id)
+        elif valor_raiz in ['=', '+=', '-=', '*=', '/=']:
+            self._organizar_asignacion(otros_terminales, root_id)
+        elif valor_raiz in ['+', '-', '*', '/', '%', '^']:
+            self._organizar_operacion_aritmetica(otros_terminales, root_id)
+        elif valor_raiz in ['<', '>', '<=', '>=', '==', '!=']:
+            self._organizar_operacion_relacional(otros_terminales, root_id)
+        elif valor_raiz == 'if':
+            self._organizar_estructura_if(otros_terminales, root_id, hijos_originales)
+        elif valor_raiz in ['cout', 'cin']:
+            self._organizar_entrada_salida(otros_terminales, root_id)
+        else:
+            # Fallback: agregar todos los terminales como hijos
+            for terminal in otros_terminales:
+                self._crear_nodo_terminal(terminal, root_id)
+    
+    def _organizar_main(self, terminales, parent_id, hijos_originales):
+        """Organiza el contenido del main procesando grupos de hijos"""
+        # Para main, procesamos los hijos originales de manera recursiva
+        # en lugar de solo los terminales
+        for hijo in hijos_originales:
+            valor_hijo = getattr(hijo, 'valor', getattr(hijo, 'tipo', ''))
+            if valor_hijo != 'main' and valor_hijo != 'ε':
+                self._agregar_nodo_al_tree(hijo, parent_id)
+    
+    def _organizar_declaracion_tipo(self, terminales, parent_id):
+        """Organiza una declaración de tipo (ej: int x, y;)"""
+        # Los identificadores van como hijos del tipo
+        for terminal in terminales:
+            valor = getattr(terminal, 'valor', '')
+            # Solo agregar identificadores y números, no símbolos como , ;
+            if valor.isalnum() or valor.replace('_', '').isalnum():
+                self._crear_nodo_terminal(terminal, parent_id)
+    
+    def _organizar_asignacion(self, terminales, parent_id):
+        """Organiza una asignación (ej: x = 5;)"""
+        # Primer terminal es la variable, resto son la expresión
+        if len(terminales) >= 1:
+            # Variable (lado izquierdo)
+            self._crear_nodo_terminal(terminales[0], parent_id)
+        if len(terminales) >= 2:
+            # Expresión (lado derecho) - puede ser múltiple para expresiones complejas
+            if len(terminales) == 2:
+                # Simple: x = 5
+                self._crear_nodo_terminal(terminales[1], parent_id)
+            else:
+                # Compleja: x = y + 5, crear subgrupo para la expresión
+                expr_id = self.tree.insert(parent_id, 'end', text="expresión", 
+                                         values=('Expresión', '', ''))
+                for terminal in terminales[1:]:
+                    self._crear_nodo_terminal(terminal, expr_id)
+    
+    def _organizar_operacion_aritmetica(self, terminales, parent_id):
+        """Organiza una operación aritmética (ej: x + y)"""
+        # Los operandos van como hijos del operador
+        for terminal in terminales:
+            self._crear_nodo_terminal(terminal, parent_id)
+    
+    def _organizar_operacion_relacional(self, terminales, parent_id):
+        """Organiza una operación relacional (ej: x < y)"""
+        # Los operandos van como hijos del operador relacional
+        for terminal in terminales:
+            self._crear_nodo_terminal(terminal, parent_id)
+    
+    def _organizar_estructura_if(self, terminales, parent_id, hijos_originales):
+        """Organiza una estructura if con sus componentes"""
+        # Para if, necesitamos procesar la condición y las sentencias
+        # Buscar nodos específicos en los hijos originales
+        for hijo in hijos_originales:
+            valor_hijo = getattr(hijo, 'valor', getattr(hijo, 'tipo', ''))
+            if valor_hijo != 'if' and valor_hijo != 'ε':
+                self._agregar_nodo_al_tree(hijo, parent_id)
+    
+    def _organizar_entrada_salida(self, terminales, parent_id):
+        """Organiza sentencias de entrada/salida (ej: cout << x;)"""
+        # Los elementos van como hijos del cout/cin
+        for terminal in terminales:
+            valor = getattr(terminal, 'valor', '')
+            if valor not in ['<<', '>>', ';']:  # Excluir operadores de flujo y ;
+                self._crear_nodo_terminal(terminal, parent_id)
+    
+    def _procesar_como_grupo(self, hijos, parent_id):
+        """Procesa un grupo de hijos cuando no hay un nodo raíz claro"""
+        for hijo in hijos:
+            self._agregar_nodo_al_tree(hijo, parent_id)
+        return parent_id

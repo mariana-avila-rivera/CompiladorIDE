@@ -168,8 +168,8 @@ def main():
     
     # Crear ventana de prueba
     root = tk.Tk()
-    root.title("Prueba - Árbol Sintáctico con Solo Terminales")
-    root.geometry("800x600")
+    root.title("Prueba - Estructura del Programa con Terminales Organizados")
+    root.geometry("900x700")
     
     # Crear widget de visualización
     tree_widget = TreeVisualizationWidget(root)
@@ -195,6 +195,11 @@ def main():
     
     btn_mostrar = tk.Button(btn_frame, text="Mostrar Árbol", command=mostrar_arbol)
     btn_mostrar.pack(side=tk.LEFT, padx=5)
+    
+    # Agregar texto explicativo
+    info_label = tk.Label(root, text="Estructura: { (raíz) → declaraciones y asignaciones → operadores engloban operandos", 
+                         bg="lightgray", anchor="w")
+    info_label.pack(side=tk.TOP, fill=tk.X, padx=5, pady=2)
     
     # Iniciar aplicación
     root.mainloop()
