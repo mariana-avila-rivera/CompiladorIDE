@@ -12,10 +12,12 @@ class AnalizadorLL1:
         self.terminales = terminales
         self.no_terminales = no_terminales
         self.errores = []
+        self.ultimo_error = None  # Para rastrear el último error encontrado
         
     def analizar(self, tokens, tabla_ll1, primeros, siguientes):
         """Analiza una lista de tokens usando la tabla LL(1) con manejo de errores mejorado"""
         self.errores = []  # Reiniciar errores
+        self.ultimo_error = None  # Reiniciar último error
         
         # Preparar tokens
         tokens_input = []
@@ -36,6 +38,7 @@ class AnalizadorLL1:
         
         exito_general = True
         
+        prev_token = None  # Guardar el token anterior
         while len(pila) > 1 and indice < len(tokens_input):
             tope = pila[-1]
             nodo_actual = pila_nodos[-1]
@@ -48,29 +51,37 @@ class AnalizadorLL1:
                 break
             
             print(f"{str(pila):<30} {token_actual:<20}", end=" ")
-              # Si el tope es terminal
+            
+            # Si el tope es terminal
             if tope in self.terminales:
                 if tope == token_actual or self._tokens_coinciden(tope, token_actual, tipo_token):
                     pila.pop()
                     # Asociar info de token al nodo hoja y cambiar el valor del nodo al lexema real
                     token_info = {'tipo': tipo_token, 'linea': linea, 'columna': columna}
                     nodo_actual.token_info = token_info
-                    # Cambiar el valor del nodo al lexema real del token (especialmente importante para números)
                     nodo_actual.valor = token_actual
                     pila_nodos.pop()
+                    prev_token = (token_actual, tipo_token, linea, columna)  # Guardar el token anterior
                     indice += 1
                     print(f"Coincide {tope}")
                 else:
-                    error_msg = f"Se esperaba '{tope}', se encontró '{token_actual}'"
-                    self._agregar_error(error_msg, linea, columna)
-                    print(f"Error: {error_msg}")
-                    
-                    # Intento de recuperación de error
-                    if self._intentar_recuperacion(pila, tokens_input, indice, primeros, siguientes):
-                        indice += 1  # Saltar el token actual
+                    # Verificar si es un error de punto y coma faltante
+                    if tope == ';' and token_actual != ';':
+                        # Usar la posición del token anterior si existe
+                        if prev_token is not None:
+                            _, _, prev_linea, prev_columna = prev_token
+                            error_linea, error_columna = prev_linea, prev_columna + len(str(prev_token[0]))
+                        else:
+                            error_linea, error_columna = linea, columna
+                        error_msg = f"Se esperaba ';' al final de la sentencia"
+                        self._agregar_error(error_msg, error_linea, error_columna)
+                        print(f"Error: {error_msg}")
                         exito_general = False
-                        continue
+                        break
                     else:
+                        error_msg = f"Se esperaba '{tope}', se encontró '{token_actual}'"
+                        self._agregar_error(error_msg, linea, columna)
+                        print(f"Error: {error_msg}")
                         exito_general = False
                         break
             
@@ -103,16 +114,23 @@ class AnalizadorLL1:
                         hijo_epsilon = NodoArbol('ε')
                         nodo_actual.agregar_hijo(hijo_epsilon)
                 else:
-                    error_msg = f"No existe regla para el no-terminal '{tope}' con el token '{token_actual}'"
-                    self._agregar_error(error_msg, linea, columna)
-                    print(f"Error: {error_msg}")
-                    
-                    # Intento de recuperación de error
-                    if self._intentar_recuperacion(pila, tokens_input, indice, primeros, siguientes):
-                        indice += 1  # Saltar el token actual
+                    # Verificar si es un error de punto y coma faltante
+                    if ';' in siguientes.get(tope, set()):
+                        # Usar la posición del token anterior si existe
+                        if prev_token is not None:
+                            _, _, prev_linea, prev_columna = prev_token
+                            error_linea, error_columna = prev_linea, prev_columna + len(str(prev_token[0]))
+                        else:
+                            error_linea, error_columna = linea, columna
+                        error_msg = f"Se esperaba ';' al final de la sentencia"
+                        self._agregar_error(error_msg, error_linea, error_columna)
+                        print(f"Error: {error_msg}")
                         exito_general = False
-                        continue
+                        break
                     else:
+                        error_msg = f"No existe regla para el no-terminal '{tope}' con el token '{token_actual}'"
+                        self._agregar_error(error_msg, linea, columna)
+                        print(f"Error: {error_msg}")
                         exito_general = False
                         break
             else:
@@ -147,6 +165,7 @@ class AnalizadorLL1:
             'columna': columna
         }
         self.errores.append(error)
+        self.ultimo_error = error
     
     def _intentar_recuperacion(self, pila, tokens_input, indice, primeros, siguientes):
         """Intenta recuperarse de un error sintáctico siguiendo la estrategia LL(1)"""
