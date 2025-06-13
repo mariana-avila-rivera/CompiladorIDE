@@ -106,21 +106,42 @@ class ASTBuilder:
         valor = self._obtener_valor_nodo(nodo_original)
         hijos_originales = getattr(nodo_original, 'hijos', [])
 
-        # Omitir nodos epsilon, None, ',' y ';'
-        if valor == 'ε' or valor is None or valor == ',' or valor == ';':
+        simbolos_omitir = {'(', ')', ',', ';', '{', '}', '[', ']', '<<', '>>'}
+
+        # Si es el nodo raíz 'programa', hacer que 'main' sea la raíz del AST
+        if valor == 'programa' and len(hijos_originales) >= 1:
+            main_nodo = None
+            hijos_main = []
+            for hijo in hijos_originales:
+                hijo_valor = self._obtener_valor_nodo(hijo)
+                if hijo_valor == 'main':
+                    main_nodo = self._procesar_nodo(hijo)
+                elif hijo_valor not in simbolos_omitir:
+                    procesado = self._procesar_nodo(hijo)
+                    if procesado:
+                        if isinstance(procesado, list):
+                            hijos_main.extend(procesado)
+                        else:
+                            hijos_main.append(procesado)
+            if main_nodo is None:
+                main_nodo = NodoAST(tipo='main', valor='main')
+            for hijo in hijos_main:
+                main_nodo.agregar_hijo(hijo)
+            return main_nodo
+
+        # Omitir nodos epsilon, None y símbolos de puntuación
+        if valor == 'ε' or valor is None or valor in simbolos_omitir:
             return None
 
-        # Lista de nodos de gramática que debemos omitir (pasar sus hijos directamente)
         nodos_a_omitir = [
-            'programa', 'lista_declaracion', 'lista_declaracion_aux',
+            'lista_declaracion', 'lista_declaracion_aux',
             'declaracion', 'lista_identificadores', 'lista_identificadores_aux',
             'sentencia', 'asignacion', 'expresion', 'expresion_simple', 'expresion_simple_aux',
             'termino', 'termino_aux', 'componente', 'factor',
-            'sent_out', 'sent_in', 'expresion_aux', 'factor_aux', 'sentencia_aux',
+            'expresion_aux', 'factor_aux', 'sentencia_aux',
             'lista_sentencias', 'lista_salida', 'lista_salida_aux', 'elemento_salida'
         ]
 
-        # Nombres de reglas que deben mostrar el token real en vez del nombre de la regla
         reglas_token = [
             'asignacion_op', 'suma_op', 'operador_termino', 'mult_op', 'tipo', 'rel_op'
         ]
@@ -140,7 +161,6 @@ class ASTBuilder:
 
         # Si es un bloque de control (if, while, etc.), la palabra reservada es la raíz
         if valor == 'seleccion' and len(hijos_originales) >= 1:
-            # hijos: if, (, expresion, ), then, lista_sentencias, seleccion_aux
             palabra_if = self._procesar_nodo(hijos_originales[0])  # 'if'
             condicion = self._procesar_nodo(hijos_originales[2])   # expresion
             palabra_then = self._procesar_nodo(hijos_originales[4])  # 'then'
@@ -166,12 +186,10 @@ class ASTBuilder:
                 return palabra_if
 
         if valor == 'seleccion_aux' and hijos_originales:
-            # hijos: else, lista_sentencias, end, ;  o  end, ;
             palabra_else = self._procesar_nodo(hijos_originales[0])
             if len(hijos_originales) == 4:
                 sentencias_else = self._procesar_nodo(hijos_originales[1])
                 palabra_end = self._procesar_nodo(hijos_originales[2])
-                # Estructura: else -> sentencias_else, end
                 if isinstance(palabra_else, NodoAST):
                     if sentencias_else:
                         if isinstance(sentencias_else, list):
@@ -183,12 +201,10 @@ class ASTBuilder:
                         palabra_else.agregar_hijo(palabra_end)
                     return palabra_else
             else:
-                # Solo end
                 palabra_end = palabra_else
                 return palabra_end
 
         if valor == 'iteracion' and len(hijos_originales) >= 1:
-            # hijos: while, (, expresion, ), lista_sentencias, end, ;
             palabra_while = self._procesar_nodo(hijos_originales[0])  # 'while'
             condicion = self._procesar_nodo(hijos_originales[2])
             sentencias = self._procesar_nodo(hijos_originales[4])
@@ -206,7 +222,61 @@ class ASTBuilder:
                     palabra_while.agregar_hijo(palabra_end)
                 return palabra_while
 
-        # Si es un nodo a omitir, procesar sus hijos directamente
+        # Si es un bloque de repetición do-until o do-while
+        if valor == 'repeticion' and len(hijos_originales) >= 1:
+            palabra_do = self._procesar_nodo(hijos_originales[0])  # 'do'
+            sentencias = self._procesar_nodo(hijos_originales[1])
+            palabra_cond = self._procesar_nodo(hijos_originales[2])  # 'until' o 'while'
+            condicion = None
+            if len(hijos_originales) > 4:
+                condicion = self._procesar_nodo(hijos_originales[4])
+            elif len(hijos_originales) > 3:
+                condicion = self._procesar_nodo(hijos_originales[3])
+            if isinstance(palabra_do, NodoAST):
+                if sentencias:
+                    if isinstance(sentencias, list):
+                        for s in sentencias:
+                            palabra_do.agregar_hijo(s)
+                    else:
+                        palabra_do.agregar_hijo(sentencias)
+                if palabra_cond:
+                    if condicion:
+                        palabra_cond.agregar_hijo(condicion)
+                    palabra_do.agregar_hijo(palabra_cond)
+                return palabra_do
+
+        # Si es una sentencia de salida (cout) o entrada (cin)
+        if valor == 'sent_out' and len(hijos_originales) >= 1:
+            cout_nodo = self._procesar_nodo(hijos_originales[0])  # 'cout'
+            if cout_nodo is None:
+                cout_nodo = NodoAST(tipo='cout', valor='cout')
+            # Agregar todos los hijos relevantes (operador y valor) en orden
+            for hijo in hijos_originales[1:]:
+                hijo_proc = self._procesar_nodo(hijo)
+                if hijo_proc is not None:
+                    if isinstance(hijo_proc, list):
+                        for elem in hijo_proc:
+                            if elem is not None:
+                                cout_nodo.agregar_hijo(elem)
+                    else:
+                        cout_nodo.agregar_hijo(hijo_proc)
+            return cout_nodo
+
+        if valor == 'sent_in' and len(hijos_originales) >= 1:
+            cin_nodo = self._procesar_nodo(hijos_originales[0])  # 'cin'
+            if cin_nodo is None:
+                cin_nodo = NodoAST(tipo='cin', valor='cin')
+            for hijo in hijos_originales[1:]:
+                hijo_proc = self._procesar_nodo(hijo)
+                if hijo_proc is not None:
+                    if isinstance(hijo_proc, list):
+                        for elem in hijo_proc:
+                            if elem is not None:
+                                cin_nodo.agregar_hijo(elem)
+                    else:
+                        cin_nodo.agregar_hijo(hijo_proc)
+            return cin_nodo
+
         if valor in nodos_a_omitir:
             hijos_procesados = []
             for hijo in hijos_originales:
@@ -216,27 +286,21 @@ class ASTBuilder:
                         hijos_procesados.extend(hijo_procesado)
                     else:
                         hijos_procesados.append(hijo_procesado)
-            # Si es una expresión, reorganizar según precedencia de operadores (incluyendo relacionales y lógicos)
             if valor in ['expresion', 'expresion_simple', 'termino']:
                 return self._reorganizar_expresion(hijos_procesados)
             return hijos_procesados
 
-        # Si es una regla que debe mostrar el token real, tomar el valor del primer hijo
         if valor in reglas_token and hijos_originales:
             primer_hijo = hijos_originales[0]
-            # Procesar el primer hijo para obtener su valor real
             hijo_procesado = self._procesar_nodo(primer_hijo)
-            # Si el hijo procesado es un nodo AST, tomar su valor
             if isinstance(hijo_procesado, NodoAST):
                 valor_real = hijo_procesado.valor
                 token_info = hijo_procesado.token_info
             else:
                 valor_real = str(hijo_procesado)
                 token_info = None
-            # Si el valor real es None, ',' o ';', no crear el nodo
-            if valor_real is None or valor_real == ',' or valor_real == ';':
+            if valor_real is None or valor_real in simbolos_omitir:
                 return None
-            # Crear nodo AST con el valor real
             nodo_ast = NodoAST(
                 tipo=valor_real,
                 valor=valor_real,
@@ -244,7 +308,6 @@ class ASTBuilder:
                 token_linea=token_info.get('linea', '') if token_info else '',
                 token_columna=token_info.get('columna', '') if token_info else ''
             )
-            # Agregar el resto de los hijos (si hay más de uno)
             for hijo in hijos_originales[1:]:
                 hijo_procesado = self._procesar_nodo(hijo)
                 if hijo_procesado:
@@ -255,7 +318,6 @@ class ASTBuilder:
                         nodo_ast.agregar_hijo(hijo_procesado)
             return nodo_ast
 
-        # Para nodos terminales o importantes, crear el nodo AST
         token_info = getattr(nodo_original, 'token_info', None)
         token_tipo = None
         token_linea = None
@@ -264,8 +326,7 @@ class ASTBuilder:
             token_tipo = token_info.get('tipo', '')
             token_linea = token_info.get('linea', '')
             token_columna = token_info.get('columna', '')
-        # Si el valor es None, ',' o ';', no crear el nodo
-        if valor is None or valor == ',' or valor == ';':
+        if valor is None or valor in simbolos_omitir:
             return None
         nodo_ast = NodoAST(
             tipo=valor,
@@ -286,6 +347,10 @@ class ASTBuilder:
 
     def _reorganizar_expresion(self, nodos):
         """Reorganiza una expresión según la precedencia de operadores, incluyendo relacionales y lógicos"""
+        if not nodos:
+            return None
+        # Filtrar nodos None antes de procesar
+        nodos = [n for n in nodos if n is not None]
         if not nodos:
             return None
         if len(nodos) == 1:
@@ -311,16 +376,21 @@ class ASTBuilder:
         operador = nodos[min_index]
         izquierda = self._reorganizar_expresion(nodos[:min_index])
         derecha = self._reorganizar_expresion(nodos[min_index+1:])
-        if isinstance(izquierda, list):
-            for nodo in izquierda:
-                operador.agregar_hijo(nodo)
-        else:
-            operador.agregar_hijo(izquierda)
-        if isinstance(derecha, list):
-            for nodo in derecha:
-                operador.agregar_hijo(nodo)
-        else:
-            operador.agregar_hijo(derecha)
+        # Solo agregar hijos si no son None
+        if izquierda is not None:
+            if isinstance(izquierda, list):
+                for nodo in izquierda:
+                    if nodo is not None:
+                        operador.agregar_hijo(nodo)
+            else:
+                operador.agregar_hijo(izquierda)
+        if derecha is not None:
+            if isinstance(derecha, list):
+                for nodo in derecha:
+                    if nodo is not None:
+                        operador.agregar_hijo(nodo)
+            else:
+                operador.agregar_hijo(derecha)
         return operador
 
     def _obtener_valor_nodo(self, nodo):
