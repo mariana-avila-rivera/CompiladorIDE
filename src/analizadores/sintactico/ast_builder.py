@@ -169,14 +169,18 @@ class ASTBuilder:
             if isinstance(palabra_if, NodoAST):
                 if condicion:
                     palabra_if.agregar_hijo(condicion)
-                if palabra_then:
-                    palabra_if.agregar_hijo(palabra_then)
+                # 'then' como raíz
+                if palabra_then is None:
+                    palabra_then = NodoAST(tipo='then', valor='then')
+                # Agregar sentencias como hijos de 'then'
                 if sentencias_then:
                     if isinstance(sentencias_then, list):
                         for s in sentencias_then:
-                            palabra_if.agregar_hijo(s)
+                            palabra_then.agregar_hijo(s)
                     else:
-                        palabra_if.agregar_hijo(sentencias_then)
+                        palabra_then.agregar_hijo(sentencias_then)
+                palabra_if.agregar_hijo(palabra_then)
+                # 'else' y 'end' ya se agregan como raíces en seleccion_aux
                 if seleccion_aux:
                     if isinstance(seleccion_aux, list):
                         for s in seleccion_aux:
