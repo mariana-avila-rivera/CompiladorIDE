@@ -108,6 +108,23 @@ class ASTBuilder:
 
         simbolos_omitir = {'(', ')', ',', ';', '{', '}', '[', ']', '<<', '>>'}
 
+        # NUEVA LÓGICA: Transformar ++ y -- en asignaciones
+        if valor == 'asignacion' and len(hijos_originales) >= 2:
+            id_nodo = self._procesar_nodo(hijos_originales[0])  # identificador
+            asignacion_op = hijos_originales[1]  # nodo asignacion_op
+            
+            # Verificar si es ++ o --
+            asignacion_hijos = getattr(asignacion_op, 'hijos', [])
+            if asignacion_hijos:
+                operador_valor = self._obtener_valor_nodo(asignacion_hijos[0])
+                
+                if operador_valor == '++':
+                    # Transformar id++ en id = id + 1
+                    return self._crear_asignacion_incremento(id_nodo, '+')
+                elif operador_valor == '--':
+                    # Transformar id-- en id = id - 1  
+                    return self._crear_asignacion_incremento(id_nodo, '-')
+    
         # Si es el nodo raíz 'programa', hacer que 'main' sea la raíz del AST
         if valor == 'programa' and len(hijos_originales) >= 1:
             main_nodo = None
@@ -348,6 +365,41 @@ class ASTBuilder:
                 else:
                     nodo_ast.agregar_hijo(hijo_procesado)
         return nodo_ast
+
+    def _crear_asignacion_incremento(self, id_nodo, operador):
+        """Crea un nodo de asignación para incremento/decremento: variable = variable +/- 1"""
+        if not id_nodo:
+            return None
+        
+        # Crear nodo de asignación
+        nodo_asignacion = NodoAST(tipo='=', valor='=')
+        
+        # Lado izquierdo: la variable
+        nodo_asignacion.agregar_hijo(id_nodo)
+        
+        # Lado derecho: variable + 1 o variable - 1
+        nodo_operacion = NodoAST(tipo=operador, valor=operador)
+        
+        # Crear una copia del identificador para el lado derecho
+        id_copia = NodoAST(
+            tipo=id_nodo.tipo,
+            valor=id_nodo.valor,
+            token_tipo=id_nodo.token_tipo,
+            token_linea=id_nodo.token_linea,
+            token_columna=id_nodo.token_columna
+        )
+        
+        # Crear nodo para el número 1
+        nodo_uno = NodoAST(tipo='numero', valor='1')
+        
+        # Estructura: operador -> [variable, 1]
+        nodo_operacion.agregar_hijo(id_copia)
+        nodo_operacion.agregar_hijo(nodo_uno)
+        
+        # Estructura final: = -> [variable, (+ variable 1)]
+        nodo_asignacion.agregar_hijo(nodo_operacion)
+        
+        return nodo_asignacion
 
     def _reorganizar_expresion(self, nodos):
         """Reorganiza una expresión según la precedencia de operadores con asociatividad izquierda"""

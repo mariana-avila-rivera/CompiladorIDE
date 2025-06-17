@@ -35,8 +35,9 @@ class GramaticaDefinicion:
             'asignacion': [['id', 'asignacion_op']],
             'asignacion_op': [
                 ['=', 'expresion', ';'],
-                ['++', ';'],
-                ['--', ';']
+                # Cambiar estas líneas para que generen estructura de asignación
+                ['++', ';'],  # Se transformará en = id + 1
+                ['--', ';']   # Se transformará en = id - 1
             ],
             'seleccion': [['if', '(', 'expresion', ')', 'then', 'lista_sentencias', 'seleccion_aux']],
             'seleccion_aux': [
