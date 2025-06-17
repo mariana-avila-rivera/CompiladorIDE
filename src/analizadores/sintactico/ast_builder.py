@@ -350,51 +350,74 @@ class ASTBuilder:
         return nodo_ast
 
     def _reorganizar_expresion(self, nodos):
-        """Reorganiza una expresión según la precedencia de operadores, incluyendo relacionales y lógicos"""
+        """Reorganiza una expresión según la precedencia de operadores con asociatividad izquierda"""
         if not nodos:
             return None
-        # Filtrar nodos None antes de procesar
+        
+        # Filtrar nodos None
         nodos = [n for n in nodos if n is not None]
         if not nodos:
             return None
         if len(nodos) == 1:
             return nodos[0]
-        # Precedencia extendida: menor número = menor precedencia (más arriba en el árbol)
-        precedencia_ext = {
-            '||': 0, '&&': 1, 'or': 0, 'and': 1, # lógicos
-            '==': 2, '!=': 2, '<': 2, '<=': 2, '>': 2, '>=': 2, # relacionales
+        
+        # Precedencia: menor número = menor precedencia (se evalúa después)
+        precedencia = {
+            '||': 0, 'or': 0,
+            '&&': 1, 'and': 1,
+            '==': 2, '!=': 2, '<': 2, '<=': 2, '>': 2, '>=': 2,
             '+': 3, '-': 3,
             '*': 4, '/': 4, '%': 4,
             '^': 5
         }
+        
+        # SOLUCIÓN: Encontrar el operador de menor precedencia MÁS A LA DERECHA
+        # Esto garantiza asociatividad izquierda
+        operador_idx = -1
         min_precedencia = float('inf')
-        min_index = -1
-        for i, nodo in enumerate(nodos):
-            if isinstance(nodo, NodoAST) and nodo.valor in precedencia_ext:
-                prec = precedencia_ext[nodo.valor]
+        
+        # Buscar de DERECHA a IZQUIERDA para asociatividad izquierda
+        for i in range(len(nodos) - 1, -1, -1):
+            nodo = nodos[i]
+            if isinstance(nodo, NodoAST) and nodo.valor in precedencia:
+                prec = precedencia[nodo.valor]
+                # Solo actualizar si encontramos menor precedencia
                 if prec < min_precedencia:
                     min_precedencia = prec
-                    min_index = i
-        if min_index == -1:
+                    operador_idx = i
+        
+        if operador_idx == -1:
+            # No hay operadores, retornar como lista
             return nodos
-        operador = nodos[min_index]
-        izquierda = self._reorganizar_expresion(nodos[:min_index])
-        derecha = self._reorganizar_expresion(nodos[min_index+1:])
-        # Solo agregar hijos si no son None
-        if izquierda is not None:
-            if isinstance(izquierda, list):
-                for nodo in izquierda:
-                    if nodo is not None:
-                        operador.agregar_hijo(nodo)
-            else:
-                operador.agregar_hijo(izquierda)
-        if derecha is not None:
-            if isinstance(derecha, list):
-                for nodo in derecha:
-                    if nodo is not None:
-                        operador.agregar_hijo(nodo)
-            else:
-                operador.agregar_hijo(derecha)
+        
+        # Construir el árbol con el operador como raíz
+        operador = nodos[operador_idx]
+        
+        # Recursivamente procesar las partes izquierda y derecha
+        izquierda = nodos[:operador_idx] if operador_idx > 0 else []
+        derecha = nodos[operador_idx + 1:] if operador_idx < len(nodos) - 1 else []
+        
+        # Limpiar los hijos existentes del operador
+        operador.hijos = []
+        
+        # Procesar lado izquierdo
+        if izquierda:
+            nodo_izq = self._reorganizar_expresion(izquierda)
+            if nodo_izq is not None:
+                if isinstance(nodo_izq, list):
+                    operador.hijos.extend([n for n in nodo_izq if n is not None])
+                else:
+                    operador.hijos.append(nodo_izq)
+        
+        # Procesar lado derecho
+        if derecha:
+            nodo_der = self._reorganizar_expresion(derecha)
+            if nodo_der is not None:
+                if isinstance(nodo_der, list):
+                    operador.hijos.extend([n for n in nodo_der if n is not None])
+                else:
+                    operador.hijos.append(nodo_der)
+        
         return operador
 
     def _obtener_valor_nodo(self, nodo):
