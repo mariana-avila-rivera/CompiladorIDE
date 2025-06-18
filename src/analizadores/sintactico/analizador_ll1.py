@@ -228,6 +228,12 @@ class AnalizadorLL1:
         if token in palabras_reservadas:
             return token
         
+        # AGREGAR MAPEO PARA OPERADORES LÓGICOS
+        if token == '&&':
+            return '&&'
+        if token == '||':
+            return '||'
+        
         # Mapeo por tipo de token según el JSON
         mapeo_tipos = {
             'Identificador': 'id',
@@ -237,7 +243,7 @@ class AnalizadorLL1:
             'Palabra reservada': lambda t: t.lower() if t.lower() in palabras_reservadas else 'id',
             'Operador aritmético': lambda t: t if t in {'+', '-', '*', '/', '%', '^', '++', '--'} else None,
             'Operador relacional': lambda t: t if t in {'<', '<=', '>', '>=', '==', '!='} else None,
-            'Operador lógico': lambda t: t.lower() if t.lower() in {'and', 'or', 'not'} else None,
+            'Operador lógico': lambda t: t if t in {'&&', '||', 'and', 'or', 'not', '!'} else None,
             'Operador de asignación': lambda t: t if t in {'=', '+=', '-=', '*=', '/=', '%=', '^='} else None,
             'Operador de shift': lambda t: t if t in {'<<', '>>'} else None,
             'Símbolo': lambda t: t if t in {'(', ')', '{', '}', '[', ']', ';', ','} else None

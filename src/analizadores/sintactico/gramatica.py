@@ -35,9 +35,8 @@ class GramaticaDefinicion:
             'asignacion': [['id', 'asignacion_op']],
             'asignacion_op': [
                 ['=', 'expresion', ';'],
-                # Cambiar estas líneas para que generen estructura de asignación
-                ['++', ';'],  # Se transformará en = id + 1
-                ['--', ';']   # Se transformará en = id - 1
+                ['++', ';'],
+                ['--', ';']
             ],
             'seleccion': [['if', '(', 'expresion', ')', 'then', 'lista_sentencias', 'seleccion_aux']],
             'seleccion_aux': [
@@ -61,11 +60,29 @@ class GramaticaDefinicion:
                 ['sentencia', 'lista_sentencias'],
                 ['ε']
             ],
-            'expresion': [['expresion_simple', 'expresion_aux']],
-            'expresion_aux': [
+            # CAMBIOS AQUÍ: Nueva jerarquía de expresiones con operadores lógicos
+            'expresion': [['expresion_logica', 'expresion_aux']],
+            'expresion_aux': [['ε']],
+            
+            # Nuevas reglas para expresiones lógicas
+            'expresion_logica': [['expresion_and', 'expresion_logica_aux']],
+            'expresion_logica_aux': [
+                ['||', 'expresion_and', 'expresion_logica_aux'],
+                ['ε']
+            ],
+            
+            'expresion_and': [['expresion_relacional', 'expresion_and_aux']],
+            'expresion_and_aux': [
+                ['&&', 'expresion_relacional', 'expresion_and_aux'],
+                ['ε']
+            ],
+            
+            'expresion_relacional': [['expresion_simple', 'expresion_relacional_aux']],
+            'expresion_relacional_aux': [
                 ['rel_op', 'expresion_simple'],
                 ['ε']
             ],
+            
             'rel_op': [['<'], ['<='], ['>'], ['>='], ['=='], ['!=']],
             'expresion_simple': [['termino', 'expresion_simple_aux']],
             'expresion_simple_aux': [
