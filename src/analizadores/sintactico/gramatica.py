@@ -32,9 +32,8 @@ class GramaticaDefinicion:
                 ['seleccion'], ['iteracion'], ['repeticion'], 
                 ['sent_in'], ['sent_out'], ['asignacion']
             ],
-            'asignacion': [['id', 'asignacion_op']],
-            'asignacion_op': [
-                ['=', 'expresion', ';'],
+            'asignacion': [['id', 'asignacion_op']],            'asignacion_op': [
+                ['=', 'expresion_simple', ';'],
                 ['++', ';'],
                 ['--', ';']
             ],

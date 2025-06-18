@@ -161,18 +161,59 @@ class ASTBuilder:
                 main_nodo = NodoAST(tipo='main', valor='main')
             for hijo in hijos_main:
                 main_nodo.agregar_hijo(hijo)
-            return main_nodo
-
-        # Omitir nodos epsilon, None y símbolos de puntuación
+            return main_nodo        # Omitir nodos epsilon, None y símbolos de puntuación
         if valor == 'ε' or valor is None or valor in simbolos_omitir:
-            return None
+            return None        # MANEJO ESPECÍFICO PARA COMPONENTE: extraer solo la expresión interna de los paréntesis
+        if valor == 'componente' and len(hijos_originales) == 3:
+            # componente -> '(' expresion ')'
+            if (self._obtener_valor_nodo(hijos_originales[0]) == '(' and 
+                self._obtener_valor_nodo(hijos_originales[2]) == ')'):
+                # Retornar solo la expresión interna procesada
+                return self._procesar_nodo(hijos_originales[1])
+        
+        # Si es componente con un solo hijo (numero, id, etc.), procesarlo normalmente
+        if valor == 'componente' and len(hijos_originales) == 1:
+            return self._procesar_nodo(hijos_originales[0])        # MANEJO ESPECÍFICO PARA TERMINO: omitir solo si tiene un hijo, procesar como expresión si tiene múltiples
+        if valor == 'termino':
+            hijos_procesados = []
+            for hijo in hijos_originales:
+                hijo_procesado = self._procesar_nodo(hijo)
+                if hijo_procesado:
+                    if isinstance(hijo_procesado, list):
+                        hijos_procesados.extend(hijo_procesado)
+                    else:
+                        hijos_procesados.append(hijo_procesado)
+            
+            print(f"DEBUG: termino procesado con {len(hijos_procesados)} hijos:")
+            for i, hijo in enumerate(hijos_procesados):
+                if hasattr(hijo, 'valor'):
+                    print(f"  [{i}] {hijo.valor} con {len(hijo.hijos) if hasattr(hijo, 'hijos') else 0} hijos")
+                    if hasattr(hijo, 'hijos') and len(hijo.hijos) > 0:
+                        print(f"      hijos: {[h.valor if hasattr(h, 'valor') else str(h) for h in hijo.hijos]}")
+                else:
+                    print(f"  [{i}] {str(hijo)}")
+            
+            # Si solo tiene un hijo, omitir el nodo termino
+            if len(hijos_procesados) == 1:
+                print(f"DEBUG: termino retornando hijo único: {hijos_procesados[0].valor if hasattr(hijos_procesados[0], 'valor') else str(hijos_procesados[0])}")
+                return hijos_procesados[0]
+            # Si tiene múltiples hijos, reorganizar como expresión
+            elif len(hijos_procesados) > 1:
+                print(f"DEBUG: termino llamando a _reorganizar_expresion con {len(hijos_procesados)} hijos")
+                resultado = self._reorganizar_expresion(hijos_procesados)
+                print(f"DEBUG: termino retornando resultado: {resultado.valor if hasattr(resultado, 'valor') else str(resultado)}")
+                if hasattr(resultado, 'hijos'):
+                    print(f"DEBUG: resultado tiene {len(resultado.hijos)} hijos: {[h.valor if hasattr(h, 'valor') else str(h) for h in resultado.hijos]}")
+                return resultado
+            else:
+                return None
 
         # CORRECCIÓN: Quitar 'asignacion' de nodos_a_omitir ya que se maneja específicamente arriba
         nodos_a_omitir = [
             'lista_declaracion', 'lista_declaracion_aux',
             'declaracion', 'lista_identificadores', 'lista_identificadores_aux',
             'sentencia', 'expresion', 'expresion_simple', 'expresion_simple_aux',
-            'termino', 'termino_aux', 'componente', 'factor',
+            'termino_aux', 'factor',  # termino se maneja específicamente arriba
             'expresion_aux', 'factor_aux', 'sentencia_aux',
             'lista_sentencias', 'lista_salida', 'lista_salida_aux', 'elemento_salida',
             # Agregar los nuevos no terminales de expresiones lógicas
@@ -347,9 +388,7 @@ class ASTBuilder:
                     if isinstance(hijo_procesado, list):
                         hijos_procesados.extend(hijo_procesado)
                     else:
-                        hijos_procesados.append(hijo_procesado)
-            
-            # Para expresiones, reorganizar según precedencia
+                        hijos_procesados.append(hijo_procesado)            # Para expresiones, reorganizar según precedencia
             if valor in ['expresion', 'expresion_simple', 'termino', 'expresion_logica', 'expresion_and', 'expresion_relacional']:
                 return self._reorganizar_expresion(hijos_procesados)
             
@@ -442,8 +481,7 @@ class ASTBuilder:
         
         # Crear nodo para el número 1
         nodo_uno = NodoAST(tipo='numero', valor='1')
-        
-        # Estructura: operador -> [variable, 1]
+          # Estructura: operador -> [variable, 1]
         nodo_operacion.agregar_hijo(id_copia)
         nodo_operacion.agregar_hijo(nodo_uno)
         
@@ -464,6 +502,13 @@ class ASTBuilder:
         if len(nodos) == 1:
             return nodos[0]
         
+        print(f"DEBUG: _reorganizar_expresion con {len(nodos)} nodos:")
+        for i, nodo in enumerate(nodos):
+            if hasattr(nodo, 'valor'):
+                print(f"  [{i}] {nodo.valor} con {len(nodo.hijos) if hasattr(nodo, 'hijos') else 0} hijos")
+                if hasattr(nodo, 'hijos') and len(nodo.hijos) > 0:
+                    print(f"      hijos: {[h.valor if hasattr(h, 'valor') else str(h) for h in nodo.hijos]}")
+        
         # Precedencia: menor número = menor precedencia (se evalúa después)
         precedencia = {
             '||': 0, 'or': 0,
@@ -474,33 +519,47 @@ class ASTBuilder:
             '^': 5
         }
         
-        # SOLUCIÓN: Encontrar el operador de menor precedencia MÁS A LA DERECHA
-        # Esto garantiza asociatividad izquierda
+        # CORRECCIÓN: Solo considerar nodos que NO tengan hijos como operadores válidos
+        # Los nodos con hijos ya son expresiones procesadas y no deben ser reorganizados
         operador_idx = -1
         min_precedencia = float('inf')
         
         # Buscar de DERECHA a IZQUIERDA para asociatividad izquierda
         for i in range(len(nodos) - 1, -1, -1):
             nodo = nodos[i]
-            if isinstance(nodo, NodoAST) and nodo.valor in precedencia:
+            # CLAVE: Solo considerar como operador si no tiene hijos (es un operador sin procesar)
+            if (isinstance(nodo, NodoAST) and 
+                nodo.valor in precedencia and 
+                len(nodo.hijos) == 0):
                 prec = precedencia[nodo.valor]
+                print(f"DEBUG: nodo {nodo.valor} en posición {i} tiene precedencia {prec}")
                 # Solo actualizar si encontramos menor precedencia
                 if prec < min_precedencia:
                     min_precedencia = prec
                     operador_idx = i
+                    print(f"DEBUG: nuevo operador seleccionado: {nodo.valor} con precedencia {prec}")
         
         if operador_idx == -1:
-            # No hay operadores, retornar como lista
-            return nodos
+            # No hay operadores válidos, retornar el primer nodo si solo hay uno válido
+            if len(nodos) == 1:
+                return nodos[0]
+            # Si hay múltiples nodos pero no operadores, puede ser un error
+            print(f"DEBUG: No se encontraron operadores válidos en nodos: {[n.valor if hasattr(n, 'valor') else str(n) for n in nodos]}")
+            return nodos[0] if nodos else None
         
         # Construir el árbol con el operador como raíz
         operador = nodos[operador_idx]
+        print(f"DEBUG: operador final seleccionado: {operador.valor} en posición {operador_idx}")
         
         # Recursivamente procesar las partes izquierda y derecha
         izquierda = nodos[:operador_idx] if operador_idx > 0 else []
         derecha = nodos[operador_idx + 1:] if operador_idx < len(nodos) - 1 else []
         
+        print(f"DEBUG: izquierda ({len(izquierda)} nodos): {[n.valor if hasattr(n, 'valor') else str(n) for n in izquierda]}")
+        print(f"DEBUG: derecha ({len(derecha)} nodos): {[n.valor if hasattr(n, 'valor') else str(n) for n in derecha]}")
+        
         # Limpiar los hijos existentes del operador
+        print(f"DEBUG: operador {operador.valor} antes: {len(operador.hijos)} hijos")
         operador.hijos = []
         
         # Procesar lado izquierdo
@@ -511,6 +570,7 @@ class ASTBuilder:
                     operador.hijos.extend([n for n in nodo_izq if n is not None])
                 else:
                     operador.hijos.append(nodo_izq)
+                    print(f"DEBUG: agregado hijo izquierdo: {nodo_izq.valor if hasattr(nodo_izq, 'valor') else str(nodo_izq)}")
         
         # Procesar lado derecho
         if derecha:
@@ -520,7 +580,9 @@ class ASTBuilder:
                     operador.hijos.extend([n for n in nodo_der if n is not None])
                 else:
                     operador.hijos.append(nodo_der)
+                    print(f"DEBUG: agregado hijo derecho: {nodo_der.valor if hasattr(nodo_der, 'valor') else str(nodo_der)}")
         
+        print(f"DEBUG: operador {operador.valor} final: {len(operador.hijos)} hijos: {[h.valor if hasattr(h, 'valor') else str(h) for h in operador.hijos]}")
         return operador
 
     def _obtener_valor_nodo(self, nodo):
