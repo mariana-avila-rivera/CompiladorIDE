@@ -5,6 +5,8 @@ from tkinter import ttk
 from analizadores.lexico import resaltar_palabras, tokenizar_codigo
 from analizadores.sintactico import AnalizadorSintactico
 
+from analizadores.semantico import SemanticASTBuilder            
+from analizadores.semantico import SemanticAnalyzer       
 
 class Toolbar:
     def __init__(self, root, file_manager, editor=None, bottom_panels=None):
@@ -163,6 +165,48 @@ class Toolbar:
             info_text = f"ERROR CRÍTICO EN EL ANÁLISIS\n\n{error_msg}"
             self.bottom_panels.show_syntactic_info(info_text)
 
+    def analizar_semantico(self):
+        """Fase Semántica: construye AST y imprime la Hash Table en terminal."""
+        if not self.editor or not self.bottom_panels:
+            return
+
+        text_area = self.editor.text_area
+        try:
+            # 1) LEX + SINT
+            tokens = tokenizar_codigo(text_area)
+            if not tokens:
+                print("[Semántico] No hay tokens")
+                return
+
+            analizador = AnalizadorSintactico()
+            analizador.inicializar()
+            exito, arbol_sintactico = analizador.analizar(tokens)
+
+            if not arbol_sintactico:
+                print("[Semántico] No se generó árbol sintáctico")
+                return
+
+            # 2) Construir AST
+            builder = SemanticASTBuilder()
+            ast = builder.construir_ast(arbol_sintactico)
+
+            # 3) Semántico: construir TS e imprimirla
+            sema = SemanticAnalyzer()
+            sema.analyze(ast)  # Imprime en terminal la Hash Table
+
+            # (Opcional) Mostrar status en panel derecho
+            info = "ANÁLISIS SEMÁNTICO COMPLETADO\n\n"
+            info += f"Estado: {'EXITOSO' if exito else 'CON ERRORES'}\n"
+            info += f"Errores semánticos: {len(sema.errors)}\n"
+            self.bottom_panels.add_text_to_tab("Semántico", info, clear=True)
+
+            # (Si quieres llevar la tabla al UI, puedes hacer:)
+            # self.bottom_panels.add_text_to_tab("Hash Table", sema.ts.print_all(), clear=True)
+
+        except Exception as e:
+            print(f"[Semántico] Error: {e}")
+            self.bottom_panels.add_text_to_tab("Semántico", f"ERROR: {e}", clear=True)
+
     def create_toolbar(self):
         self.toolbar_frame = tk.Frame(self.root) # Asigna el Frame a self.toolbar_frame
 
@@ -186,7 +230,7 @@ class Toolbar:
         buttons = [
             ("Lexico", self.analizar_lexico),
             ("Sintáctico", self.analizar_sintactico),
-            ("Semántico", None),
+            ("Semántico", self.analizar_semantico),
         ]
         for label, command in buttonsIcons:
             btn = ttk.Button(self.toolbar_frame, image=icons[label], command=command)

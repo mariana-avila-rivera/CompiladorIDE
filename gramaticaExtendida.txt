@@ -1,0 +1,226 @@
+programa → main { lista_declaracion } ;
+
+lista_declaracion → declaracion lista_declaracion
+                  | ε
+
+declaracion → declaracion_variable
+            | sentencia
+
+declaracion_variable → tipo lista_identificadores ;
+
+tipo → int   { tipo.tipo = int }
+     | float { tipo.tipo = float }
+     | bool  { tipo.tipo = bool }
+
+lista_identificadores → id lista_identificadores_aux
+{ 
+  if (existe(id.lexema)) error("Identificador redeclarado: " + id.lexema);
+  else insertarTabla(id.lexema, lista_identificadores.t);
+}
+
+lista_identificadores_aux → , id lista_identificadores_aux
+{
+  if (existe(id.lexema)) error("Identificador redeclarado: " + id.lexema);
+  else insertarTabla(id.lexema, lista_identificadores_aux.t);
+}
+| ε
+
+sentencia → seleccion
+          | iteracion
+          | repeticion
+          | sent_in
+          | sent_out
+          | asignacion
+
+asignacion → id asignacion_op
+{
+  if (!existe(id.lexema)) error("Variable no declarada: " + id.lexema);
+  else {
+    asignacion_op.tVar = tipoDe(id.lexema);
+    asignacion_op.esVariable = true; // para ++/--
+  }
+}
+
+asignacion_op → = expresion ;
+{
+  if (!esAsignable(asignacion_op.tVar, expresion.tipo))
+    error("Tipos incompatibles en asignación: " + asignacion_op.tVar + " = " + expresion.tipo);
+}
+| ++ ;
+{
+  if (!asignacion_op.esVariable) error("++ requiere lvalue");
+  else if (!esNumerico(asignacion_op.tVar))
+    error("++ solo aplica a tipos numéricos");
+}
+| --  ;
+{
+  if (!asignacion_op.esVariable) error("-- requiere lvalue");
+  else if (!esNumerico(asignacion_op.tVar))
+    error("-- solo aplica a tipos numéricos");
+}
+
+seleccion → if ( expresion ) then lista_sentencias seleccion_aux
+{
+  if (expresion.tipo != bool) error("La condición del if debe ser bool");
+}
+
+seleccion_aux → else lista_sentencias end
+              | end
+
+iteracion → while ( expresion ) lista_sentencias end
+{
+  if (expresion.tipo != bool) error("La condición del while debe ser bool");
+}
+
+repeticion → do lista_sentencias until ( expresion ) ;
+{
+  if (expresion.tipo != bool) error("La condición del until debe ser bool");
+}
+| do lista_sentencias while ( expresion ) lista_sentencias end
+{
+  if (expresion.tipo != bool) error("La condición del while debe ser bool");
+}
+
+sent_in → cin >> id ;
+{
+  if (!existe(id.lexema)) error("Variable no declarada en entrada: " + id.lexema);
+  else {
+    let t = tipoDe(id.lexema);
+    if (!(t==int || t==float || t==bool || t==string))
+      error("Tipo no soportado en entrada: " + t);
+  }
+}
+
+sent_out → cout << lista_salida ;
+
+lista_salida → elemento_salida lista_salida_aux
+{ /* elemento_salida ya valida su tipo */ }
+
+lista_salida_aux → << elemento_salida lista_salida_aux
+                  | ε
+
+elemento_salida → cadena
+{ elemento_salida.tipo = string }
+| expresion
+{ elemento_salida.tipo = expresion.tipo }
+
+lista_sentencias → sentencia lista_sentencias
+                 | ε
+
+expresion → expresion_simple expresion_aux
+{
+  if (expresion_aux.tieneRel) expresion.tipo = bool;
+  else expresion.tipo = expresion_simple.tipo;
+}
+
+expresion_aux → rel_op expresion_simple
+{
+  // Tipado relacional: ambos lados numéricos o ambos del mismo tipo escalar
+  if (esNumerico($-1.tipo) && esNumerico(expresion_simple.tipo)) { /* ok */ }
+  else if ($-1.tipo == expresion_simple.tipo && ( $-1.tipo==bool || $-1.tipo==string))
+    { /* permitir ==, != si deseas (tu gramática sí los incluye) */ }
+  else error("Operandos incompatibles en operador relacional");
+  expresion_aux.tieneRel = true;
+}
+| ε { expresion_aux.tieneRel = false; }
+
+rel_op → < | <= | > | >= | == | !=
+
+expresion_simple → termino expresion_simple_aux
+{
+  if (expresion_simple_aux.presente) {
+    if (esNumerico(termino.tipo) && esNumerico(expresion_simple_aux.tipo))
+      expresion_simple.tipo = promocionar(termino.tipo, expresion_simple_aux.tipo);
+    else error("Operandos no numéricos en suma/resta/++/--");
+  } else expresion_simple.tipo = termino.tipo;
+}
+
+expresion_simple_aux → suma_op termino expresion_simple_aux
+{
+  if (!esNumerico(termino.tipo)) error("Operando no numérico en suma_op");
+  // ++ y -- como operadores binarios aquí NO tienen sentido: tu gramática los listó en suma_op.
+  // Si los quieres como unarios, ya se validan en asignación_op. Aquí trata + y -.
+  if (suma_op ∈ {+, -}) {
+    if (!esNumerico($-1.tipo)) error("Acumulador no numérico en suma_op");
+    expresion_simple_aux.tipo = promocionar($-1.tipo, termino.tipo);
+  }
+  expresion_simple_aux.presente = true;
+}
+| ε
+{
+  expresion_simple_aux.presente = false;
+  expresion_simple_aux.tipo = ⟂;
+}
+
+suma_op → + | - | ++ | --
+{
+  if (suma_op ∈ {++ , --})
+    error("++/-- sólo válidos como operadores de asignación a variables (no en expresiones binarias)");
+}
+
+termino → componente termino_aux
+{
+  if (termino_aux.presente) {
+    if (termino_aux.op == '^') {
+      // Potencia: resultado numérico; promoción usual
+      if (esNumerico(componente.tipo) && esNumerico(termino_aux.tipo))
+        termino.tipo = promocionar(componente.tipo, termino_aux.tipo);
+      else error("Potencia requiere operandos numéricos");
+    } else { // *, /, %
+      if (termino_aux.op == '%' && !(esEntero(componente.tipo) && esEntero(termino_aux.tipo)))
+        error("Operador % requiere operandos enteros");
+      else if (esNumerico(componente.tipo) && esNumerico(termino_aux.tipo))
+        termino.tipo = (termino_aux.op=='%' ? int : promocionar(componente.tipo, termino_aux.tipo));
+      else error("Operación de término requiere operandos numéricos");
+    }
+  } else termino.tipo = componente.tipo;
+}
+
+termino_aux → operador_termino componente termino_aux
+{
+  termino_aux.presente = true;
+  termino_aux.op = operador_termino.op;
+
+  if (operador_termino.op == '^') {
+    if (!esNumerico(componente.tipo)) error("Potencia requiere operando numérico");
+    // tipo parcial para encadenar potencias
+    termino_aux.tipo = componente.tipo;
+  } else { // mult_op
+    if (operador_termino.op == '%' && !esEntero(componente.tipo))
+      error("% requiere operando entero");
+    else if (!esNumerico(componente.tipo))
+      error("*,/,% requieren operando numérico");
+    else termino_aux.tipo = componente.tipo;
+  }
+}
+| ε
+{
+  termino_aux.presente = false;
+}
+
+operador_termino → mult_op { operador_termino.op = mult_op.op }
+                 | ^       { operador_termino.op = '^' }
+
+mult_op → * | / | % { mult_op.op = token }
+
+componente → ( expresion ) 
+{ componente.tipo = expresion.tipo }
+| numero 
+{ componente.tipo = numero.tipo }      // int o float según el léxico
+| id 
+{
+  if (!existe(id.lexema)) error("Variable no declarada: " + id.lexema);
+  else componente.tipo = tipoDe(id.lexema);
+}
+| booleano
+{ componente.tipo = bool }
+| ! componente
+{
+  if (componente.tipo != bool) error("! requiere operando bool");
+  componente.tipo = bool;
+}
+
+booleano → true  { booleano.tipo = bool }
+         | false { booleano.tipo = bool }
+
+cadena → "cualquier_texto" { cadena.tipo = string }
