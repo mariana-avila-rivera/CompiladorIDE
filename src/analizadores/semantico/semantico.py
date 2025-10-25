@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# analizadores/semantico.py
+# analizadores/semantico/semantico.py
 
-from typing import List
+from typing import List, Optional
 from .symtab import ScopedSymTab, ExpType
 
 TIPO_NODOS_DECL = {"int": ExpType.TyInt, "float": ExpType.TyFloat, "bool": ExpType.TyBool}
@@ -12,24 +12,16 @@ class SemanticAnalyzer:
         self.errors: List[str] = []
 
     def analyze(self, ast_root):
-        """
-        Recorre el AST:
-        - Inserta declaraciones: nodos cuyo tipo sea 'int'|'float'|'bool' con hijos identificadores.
-        - Registra usos de identificadores en expresiones y sentencias.
-        - Imprime Hash Table al final.
-        """
         if ast_root is None:
             print("[Semántico] AST vacío")
             return
 
-        # Con tu gramática actual, basta un solo scope (main). 
-        # Si después hay bloques con variables locales, activa push/pop_scope en los nodos de bloque.
         self._visit(ast_root)
 
-        # Imprimir TS a terminal
-        print("\n===== HASH TABLE =====")
-        print(self.ts.print_all())
-        print("======================\n")
+        # Imprimir TS en el formato solicitado
+        print("\nHASH TABLE:")
+        print(self.ts.print_all_custom())
+        print()
 
         if self.errors:
             print("ERRORES SEMÁNTICOS:")
@@ -39,42 +31,97 @@ class SemanticAnalyzer:
     # ----------------- Recorrido -----------------
 
     def _visit(self, node, parent=None):
-        if node is None: return
+        if node is None:
+            return
 
-        # 1) Declaraciones: nodo tipo 'int'|'float'|'bool' con hijos identificadores
+        # 1) Declaraciones: nodo 'int'|'float'|'bool' con hijos id
         if node.tipo in TIPO_NODOS_DECL:
             vtype = TIPO_NODOS_DECL[node.tipo]
             for child in getattr(node, "hijos", []):
-                if getattr(child, "tipo", "") == "id":
+                if self._es_ident(child):
                     name = child.valor
                     linea = int(child.token_linea or 0)
-                    # redeclaración en mismo scope
+                    # redeclaración en el scope actual
                     if self.ts.scopes[-1].exists(name):
                         self.errors.append(f"[L{linea}] Redeclaración de '{name}'")
+                    # Inserta con valor inicial del tipo
                     self.ts.st_insert(name, linea, vtype)
-            # seguir recorriendo por si contienen algo más
-            for ch in node.hijos:
-                self._visit(ch, node)
+            # IMPORTANTE: no recorras los hijos id (evita contarlos como uso)
             return
 
-        # 2) Uso de identificadores (no en lado de tipo de declaración)
-        if node.tipo == "id":
+        # 2) Asignación "=": procesa LHS y RHS sin duplicar líneas
+        if node.tipo == '=' and len(node.hijos) >= 2:
+            lhs = node.hijos[0]
+            rhs = node.hijos[1]
+
+            # Solo LHS puede ser id asignable
+            if self._es_ident(lhs):
+                name = lhs.valor
+                linea = int(lhs.token_linea or 0)
+                if not self.ts.st_exists(name):
+                    self.errors.append(f"[L{linea}] Variable no declarada '{name}'")
+                else:
+                    lit = self._eval_literal(rhs)
+                    if lit is not None:
+                        # Si hay literal, actualiza valor y registra la línea UNA sola vez
+                        self.ts.st_set_value(name, lit, lineno=linea)
+                    else:
+                        # Si no hay literal (expresión), cuenta una aparición del id LHS
+                        self.ts.st_insert_use(name, linea)
+
+            # Muy importante: visitar SOLO el RHS para detectar ids dentro de la expresión
+            self._visit(rhs, node)
+            return
+
+        # 3) Uso de identificadores (no LHS en declaración ni ya manejado en '=')
+        if self._es_ident(node):
             name = node.valor
             linea = int(node.token_linea or 0)
             if not self.ts.st_exists(name):
                 self.errors.append(f"[L{linea}] Variable no declarada '{name}'")
             else:
                 self.ts.st_insert_use(name, linea)
-            # id es hoja; return
             return
 
-        # 3) Posibles puntos de scope (si los quisieras activar)
-        # if node.tipo in ("then", "else", "while", "do"):
-        #     self.ts.push_scope()
-        #     for ch in node.hijos: self._visit(ch, node)
-        #     self.ts.pop_scope()
-        #     return
-
-        # Recorre hijos por defecto
+        # Recorre hijos
         for ch in getattr(node, "hijos", []):
             self._visit(ch, node)
+
+    # ----------------- Helpers -----------------
+
+    def _es_ident(self, node) -> bool:
+        return (
+            getattr(node, "tipo", "") == "id" or
+            getattr(node, "token_tipo", "") == "Identificador"
+        )
+
+    def _eval_literal(self, node) -> Optional[object]:
+        """Devuelve int/float/string/bool si 'node' es literal; de lo contrario, None."""
+        if node is None:
+            return None
+
+        if node.tipo == "numero":
+            try:
+                lex = str(node.valor)
+                if any(c in lex for c in ".eE"):
+                    return float(lex)
+                else:
+                    return int(lex)
+            except Exception:
+                return None
+
+        if node.tipo == "cadena":
+            val = str(node.valor)
+            if len(val) >= 2 and ((val[0] == '"' and val[-1] == '"') or (val[0] == "'" and val[-1] == "'")):
+                return val[1:-1]
+            return val
+
+        if node.tipo == "booleano":
+            return True if str(node.valor).lower() == "true" else False
+
+        # Si RHS es paréntesis/unario con literal, intenta bajar
+        if getattr(node, "hijos", None):
+            if len(node.hijos) == 1:
+                return self._eval_literal(node.hijos[0])
+
+        return None
