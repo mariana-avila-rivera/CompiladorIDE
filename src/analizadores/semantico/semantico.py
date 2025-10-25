@@ -10,11 +10,15 @@ class SemanticAnalyzer:
     def __init__(self):
         self.ts = ScopedSymTab()
         self.errors: List[str] = []
+        self._reported_errors = set()  # Para evitar errores duplicados
 
     def analyze(self, ast_root):
         if ast_root is None:
             print("[Semántico] AST vacío")
             return
+        
+        # Limpiar errores reportados al inicio de cada análisis
+        self._reported_errors.clear()
 
         self._visit(ast_root)
 
@@ -73,12 +77,80 @@ class SemanticAnalyzer:
             self._visit(rhs, node)
             return
 
-        # 3) Uso de identificadores (no LHS en declaración ni ya manejado en '=')
+        # 3) Nodos cin: marcar variable como modificada
+        if node.tipo == 'cin' and node.hijos:
+            for child in node.hijos:
+                if self._es_ident(child):
+                    name = child.valor
+                    linea = int(child.token_linea or 0)
+                    if not self.ts.st_exists(name):
+                        error_key = f"{name}:{linea}"  # Clave única para cada error
+                        if error_key not in self._reported_errors:
+                            self.errors.append(f"[L{linea}] Variable no declarada '{name}'")
+                            self._reported_errors.add(error_key)
+                    else:
+                        # Solo usamos set_value que ya registra la línea internamente
+                        # y establecemos el valor como "input"
+                        self.ts.st_set_value(name, "input", lineno=linea)
+            return
+
+        # 4) Nodos while/do: procesar condición y cuerpo
+        if node.tipo in ('while', 'do'):
+            # En nodos while:
+            # - El primer hijo es la condición
+            # - El segundo hijo es un nodo 'body' que contiene todas las sentencias
+            if len(node.hijos) >= 1:
+                # Procesar la condición
+                self._visit(node.hijos[0], node)
+            
+            if len(node.hijos) >= 2:
+                body_node = node.hijos[1]
+                if body_node.tipo == 'body':
+                    # Procesar cada sentencia en el cuerpo
+                    for stmt in body_node.hijos:
+                        self._visit(stmt, node)
+            return
+
+        # 4.1) Para do-until/while
+        if node.tipo == 'do':
+            for child in node.hijos:
+                if child.tipo == 'body':
+                    # Procesar cada sentencia en el cuerpo del do
+                    for stmt in child.hijos:
+                        if stmt.tipo == 'while':
+                            # Procesar el while anidado
+                            if len(stmt.hijos) >= 1:
+                                # Procesar la condición del while
+                                self._visit(stmt.hijos[0], stmt)
+                            if len(stmt.hijos) >= 2 and stmt.hijos[1].tipo == 'body':
+                                # Procesar el cuerpo del while
+                                for while_stmt in stmt.hijos[1].hijos:
+                                    self._visit(while_stmt, stmt)
+                        else:
+                            # Procesar otras sentencias en el do
+                            self._visit(stmt, node)
+                elif child.tipo in ('while', 'until'):
+                    # Procesar la condición del until/while final
+                    if child.hijos:
+                        self._visit(child.hijos[0], node)
+            return
+
+        # 5) Nodos cout: verificar variables en expresiones
+        if node.tipo == 'cout':
+            # Procesar cada expresión a imprimir
+            for child in node.hijos:
+                self._visit(child, node)
+            return
+
+        # 6) Uso de identificadores (no LHS en declaración ni ya manejado en '=')
         if self._es_ident(node):
             name = node.valor
             linea = int(node.token_linea or 0)
             if not self.ts.st_exists(name):
-                self.errors.append(f"[L{linea}] Variable no declarada '{name}'")
+                error_key = f"{name}:{linea}"  # Clave única para cada error
+                if error_key not in self._reported_errors:
+                    self.errors.append(f"[L{linea}] Variable no declarada '{name}'")
+                    self._reported_errors.add(error_key)
             else:
                 self.ts.st_insert_use(name, linea)
             return

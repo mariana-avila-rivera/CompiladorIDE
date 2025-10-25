@@ -156,18 +156,66 @@ class SemanticASTBuilder:
         if v == 'iteracion':
             wn = NodoAST(tipo='while', valor='while')
             if len(hijos) >= 4:
+                # La condición siempre está en el tercer hijo (después de 'while' y '(')
                 cond = self._proc(hijos[2])
-                body = self._proc(hijos[3]) if len(hijos) >= 5 else self._proc(hijos[4])
-                if cond: wn.agregar_hijo(cond)
-                for s in self._flatten(body): wn.agregar_hijo(s)
+                if cond: 
+                    wn.agregar_hijo(cond)
+                
+                # El cuerpo está después de la condición y antes del 'end'
+                # Crear un nodo especial para el cuerpo para mantener la estructura
+                body_node = NodoAST(tipo='body', valor='body')
+                for i in range(3, len(hijos)):
+                    if self._get_val(hijos[i]) == 'end':
+                        break
+                    body = self._proc(hijos[i])
+                    if body:
+                        if isinstance(body, list):
+                            for stmt in body:
+                                if stmt: body_node.agregar_hijo(stmt)
+                        else:
+                            body_node.agregar_hijo(body)
+                
+                wn.agregar_hijo(body_node)
             return wn
 
         # repeticion → do lista_sentencias until ( expresion ) ;
         #            | do lista_sentencias while ( expresion ) lista_sentencias end
         if v == 'repeticion' and len(hijos) >= 3:
             don = NodoAST(tipo='do', valor='do')
-            body = self._proc(hijos[1])
-            for s in self._flatten(body): don.agregar_hijo(s)
+            
+            # Crear nodo body para el cuerpo principal del do
+            body_node = NodoAST(tipo='body', valor='body')
+            
+            # Procesar la lista de sentencias (puede incluir while anidado)
+            body_stmts = self._proc(hijos[1])
+            if body_stmts:
+                if isinstance(body_stmts, list):
+                    for stmt in body_stmts:
+                        if stmt:
+                            # Si es un while, procésalo como estructura de control
+                            if isinstance(stmt, NodoAST) and stmt.tipo == 'while':
+                                wn = NodoAST(tipo='while', valor='while')
+                                if stmt.hijos:
+                                    # La condición del while
+                                    cond = stmt.hijos[0]
+                                    if cond:
+                                        wn.agregar_hijo(cond)
+                                    # El cuerpo del while
+                                    if len(stmt.hijos) > 1:
+                                        while_body = NodoAST(tipo='body', valor='body')
+                                        for while_stmt in stmt.hijos[1:]:
+                                            if while_stmt:
+                                                while_body.agregar_hijo(while_stmt)
+                                        wn.agregar_hijo(while_body)
+                                body_node.agregar_hijo(wn)
+                            else:
+                                body_node.agregar_hijo(stmt)
+                else:
+                    body_node.agregar_hijo(body_stmts)
+            
+            don.agregar_hijo(body_node)
+            
+            # Procesar la parte until/while
             kw = self._get_val(hijos[2])
             if kw == 'until':
                 cond = self._proc(hijos[4]) if len(hijos) > 4 else None
@@ -181,10 +229,11 @@ class SemanticASTBuilder:
                 # bloque extra después de while
                 extra = self._proc(hijos[5]) if len(hijos) > 5 else None
                 if extra:
-                    block = NodoAST(tipo='then', valor='then')
+                    block = NodoAST(tipo='body', valor='body')
                     for s in self._flatten(extra): block.agregar_hijo(s)
                     wn.agregar_hijo(block)
                 don.agregar_hijo(wn)
+            
             return don
 
         # cout << lista_salida ;

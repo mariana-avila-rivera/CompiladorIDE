@@ -131,9 +131,13 @@ class HashTable:
             unique_lines = sorted(b.lines)
             lines_str = ",".join(str(n) for n in unique_lines)
 
-            # valor: para bool imprime true/false
-            if isinstance(b.last_value, bool):
+            # Formateo especial de valores
+            if b.last_value == "input":
+                val_str = "<input>"  # Indica valor de entrada por cin
+            elif isinstance(b.last_value, bool):
                 val_str = "true" if b.last_value else "false"
+            elif b.last_value is None:
+                val_str = "<undefined>"
             else:
                 val_str = str(b.last_value)
 
