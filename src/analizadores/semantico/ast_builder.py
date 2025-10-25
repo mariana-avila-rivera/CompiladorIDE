@@ -218,9 +218,14 @@ class SemanticASTBuilder:
             # Procesar la parte until/while
             kw = self._get_val(hijos[2])
             if kw == 'until':
-                cond = self._proc(hijos[4]) if len(hijos) > 4 else None
+                # Asegurarse de procesar la expresión completa del until
                 un = NodoAST(tipo='until', valor='until')
-                if cond: un.agregar_hijo(cond)
+                # Buscar la expresión después del paréntesis
+                for i in range(4, len(hijos)):
+                    if self._get_val(hijos[i]) != ')':  # Ignorar el paréntesis
+                        cond = self._proc(hijos[i])
+                        if cond:
+                            un.agregar_hijo(cond)
                 don.agregar_hijo(un)
             elif kw == 'while':
                 cond = self._proc(hijos[4]) if len(hijos) > 4 else None

@@ -3,6 +3,7 @@
 
 from typing import List, Optional
 from .symtab import ScopedSymTab, ExpType
+from analizadores.sintactico.ast_builder import NodoAST
 
 TIPO_NODOS_DECL = {"int": ExpType.TyInt, "float": ExpType.TyFloat, "bool": ExpType.TyBool}
 
@@ -95,18 +96,28 @@ class SemanticAnalyzer:
             return
 
         # 4) Nodos while/do: procesar condición y cuerpo
-        if node.tipo in ('while', 'do'):
-            # En nodos while:
-            # - El primer hijo es la condición
-            # - El segundo hijo es un nodo 'body' que contiene todas las sentencias
-            if len(node.hijos) >= 1:
-                # Procesar la condición
-                self._visit(node.hijos[0], node)
+        if node.tipo in ('while', 'do', 'until'):
+            # Procesar la condición si es un nodo while o until
+            if node.tipo in ('while', 'until'):
+                if len(node.hijos) >= 1:
+                    # La condición está en el primer hijo
+                    self._visit(node.hijos[0], node)
             
-            if len(node.hijos) >= 2:
+            # Si es un nodo do, procesar su cuerpo y la condición del until/while
+            if node.tipo == 'do':
+                for child in node.hijos:
+                    if child.tipo == 'body':
+                        # Procesar cada sentencia en el cuerpo del do
+                        for stmt in child.hijos:
+                            self._visit(stmt, node)
+                    elif child.tipo in ('while', 'until'):
+                        # Para el until/while final, procesar su condición
+                        if child.hijos:
+                            self._visit(child.hijos[0], child)
+            # Si es un while común, procesar su cuerpo
+            elif node.tipo == 'while' and len(node.hijos) >= 2:
                 body_node = node.hijos[1]
                 if body_node.tipo == 'body':
-                    # Procesar cada sentencia en el cuerpo
                     for stmt in body_node.hijos:
                         self._visit(stmt, node)
             return
@@ -130,9 +141,8 @@ class SemanticAnalyzer:
                             # Procesar otras sentencias en el do
                             self._visit(stmt, node)
                 elif child.tipo in ('while', 'until'):
-                    # Procesar la condición del until/while final
-                    if child.hijos:
-                        self._visit(child.hijos[0], node)
+                    # La condición se procesará en la parte principal del _visit
+                    self._visit(child, node)
             return
 
         # 5) Nodos cout: verificar variables en expresiones
