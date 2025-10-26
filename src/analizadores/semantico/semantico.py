@@ -118,7 +118,10 @@ class SemanticAnalyzer:
             if not self.ts.st_exists(name):
                 self._report(f"Variable no declarada '{name}'", node)
                 return ExpType.TyError
+            # ✅ registrar uso SIEMPRE que inferimos un id
+            self.ts.st_insert_use(name, int(getattr(node, "token_linea", 0) or 0))
             return self.ts.st_lookup_type(name)
+
 
         # Unario "!"
         if t == "!":
@@ -207,28 +210,34 @@ class SemanticAnalyzer:
 
             if self._es_ident(lhs):
                 name = lhs.valor
+                linea_lhs = int(lhs.token_linea or 0)
+
                 if not self.ts.st_exists(name):
                     self._report(f"Variable no declarada '{name}'", lhs)
+                    # Igual cuenta la aparición del LHS aunque esté sin declarar? 
+                    # Si NO quieres contar usos de no declaradas, comenta la línea siguiente.
+                    # self.ts.st_insert_use(name, linea_lhs)
                 else:
                     dst_t = self.ts.st_lookup_type(name)
-                    src_t = self._infer(rhs)
+                    src_t = self._infer(rhs)   # _infer registra usos dentro del RHS
+
                     if not _assignable(dst_t, src_t):
-                        self._report(
-                            f"Tipos incompatibles en asignación: {dst_t} = {src_t}",
-                            node
-                        )
+                        # Incompatible: reporta y AUN ASÍ cuenta aparición del LHS
+                        self._report(f"Tipos incompatibles en asignación: {dst_t} = {src_t}", node)
+                        self.ts.st_insert_use(name, linea_lhs)
                     else:
-                        # Literal → actualiza valor; expresión → solo uso
+                        # Compatible
                         lit = self._eval_literal(rhs)
                         if lit is not None:
-                            self.ts.st_set_value(name, lit, lineno=int(lhs.token_linea or 0))
+                            # Literal: actualiza valor y registra línea (cuenta aparición)
+                            self.ts.st_set_value(name, lit, lineno=linea_lhs)
                         else:
-                            self.ts.st_insert_use(name, int(lhs.token_linea or 0))
+                            # Expresión: cuenta aparición del LHS
+                            self.ts.st_insert_use(name, linea_lhs)
 
-            # Visitar RHS para registrar usos internos
-            self._visit(rhs, node)
-            return
+            return  # no visites rhs otra vez (ya lo hizo _infer)
 
+            
         # (3) cin: tipos soportados + existencia
         if node.tipo == 'cin' and node.hijos:
             for child in node.hijos:
