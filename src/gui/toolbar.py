@@ -200,9 +200,10 @@ class Toolbar:
 
             # 6) Mostrar Errores Semánticos
             if errores:
+                # errores es una lista de dicts: {msg, linea, columna}
                 errores_text = "ERRORES SEMÁNTICOS ENCONTRADOS:\n\n"
-                for error in errores:
-                    errores_text += f"• {error}\n"
+                for i, e in enumerate(errores, start=1):
+                    errores_text += f"{i}.  {e['msg']} (Línea: {e['linea']}, Columna: {e['columna']})\n"
                 self.bottom_panels.add_text_to_tab("Errores Semánticos", errores_text, clear=True)
             else:
                 self.bottom_panels.add_text_to_tab("Errores Semánticos", "✓ No se encontraron errores semánticos", clear=True)
@@ -284,12 +285,6 @@ class Toolbar:
                         text_widget.insert(tk.END, line + "\n", "table_content")
                 text_widget.config(state="disabled")
                 text_widget.see('1.0')
-
-            # Mostrar errores en el panel de errores semánticos
-            if errores:
-                self.bottom_panels.add_text_to_tab("Errores Semánticos", errores, clear=True)
-            else:
-                self.bottom_panels.add_text_to_tab("Errores Semánticos", "No se encontraron errores semánticos", clear=True)
 
             # Mostrar estado en el panel semántico
             info = "ANÁLISIS SEMÁNTICO COMPLETADO\n\n"

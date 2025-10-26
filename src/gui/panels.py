@@ -84,18 +84,6 @@ class BottomPanels:
         """Obtener el widget del árbol sintáctico"""
         return self.tree_widget
     
-    def add_text_to_tab(self, tab_name, text_content, clear=False):
-        """Agregar texto a una pestaña específica"""
-        widget = self.get_text_widget(tab_name)
-        if widget:
-            widget.config(state="normal")
-            if clear:
-                widget.delete('1.0', tk.END)
-            widget.insert(tk.END, text_content + "\n")
-            widget.config(state="disabled")
-            # Scroll hasta el final
-            widget.see(tk.END)
-    
     def show_syntactic_tree(self, tree_root):
         """Mostrar el árbol sintáctico en la pestaña correspondiente"""
         if self.tree_widget and tree_root:
@@ -144,15 +132,16 @@ class BottomPanels:
             info_widget.config(state="disabled")
     
     def add_text_to_tab(self, tab_name, text, clear=False):
-        """Añadir texto a una pestaña específica"""
-        text_widget = self.get_text_widget(tab_name)
-        if text_widget:
-            # Habilitar temporalmente para poder modificar
-            text_widget.config(state="normal")
+        widget = self.get_text_widget(tab_name)
+        if widget:
+            widget.config(state="normal")
             if clear:
-                text_widget.delete("1.0", tk.END)
-            text_widget.insert(tk.END, text)
-            # Desplazar automáticamente al inicio
-            text_widget.see("1.0")
-            # Volver a deshabilitar para solo lectura
-            text_widget.config(state="disabled")
+                widget.delete("1.0", tk.END)
+            # Asegura string + salto de línea final
+            s = text if isinstance(text, str) else str(text)
+            if not s.endswith("\n"):
+                s += "\n"
+            widget.insert(tk.END, s)
+            widget.see("1.0")
+            widget.config(state="disabled")
+
