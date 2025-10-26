@@ -166,9 +166,80 @@ class Toolbar:
             self.bottom_panels.show_syntactic_info(info_text)
 
     def analizar_semantico(self):
-        """Fase Semántica: construye AST y imprime la Hash Table en terminal."""
+        """Fase Semántica: construye AST, analiza tipos y muestra resultados."""
         if not self.editor or not self.bottom_panels:
             return
+
+        text_area = self.editor.text_area
+        try:
+            # 1) Análisis Léxico: obtener tokens
+            tokens = tokenizar_codigo(text_area)
+            if not tokens:
+                self.bottom_panels.add_text_to_tab("Errores Semánticos", "No se pudieron obtener tokens del código", clear=True)
+                return
+
+            # 2) Análisis Sintáctico: construir árbol
+            analizador = AnalizadorSintactico()
+            analizador.inicializar()
+            exito, arbol_sintactico = analizador.analizar(tokens)
+
+            if not arbol_sintactico:
+                self.bottom_panels.add_text_to_tab("Errores Semánticos", "No se pudo generar el árbol sintáctico", clear=True)
+                return
+
+            # 3) Construir AST normalizado
+            builder = SemanticASTBuilder()
+            ast = builder.construir_ast(arbol_sintactico)
+
+            # 4) Análisis Semántico
+            sema = SemanticAnalyzer()
+            _, tabla_hash, errores = sema.analyze(ast)
+
+            # 5) Mostrar Tabla Hash
+            self.bottom_panels.add_text_to_tab("Hash Table", tabla_hash, clear=True)
+
+            # 6) Mostrar Errores Semánticos
+            if errores:
+                errores_text = "ERRORES SEMÁNTICOS ENCONTRADOS:\n\n"
+                for error in errores:
+                    errores_text += f"• {error}\n"
+                self.bottom_panels.add_text_to_tab("Errores Semánticos", errores_text, clear=True)
+            else:
+                self.bottom_panels.add_text_to_tab("Errores Semánticos", "✓ No se encontraron errores semánticos", clear=True)
+
+            # 7) Mostrar Estado del Análisis
+            info = "ANÁLISIS SEMÁNTICO COMPLETADO\n\n"
+            info += f"Estado: {'EXITOSO' if not errores else 'CON ERRORES'}\n"
+            info += f"Tokens procesados: {len(tokens)}\n"
+            info += f"Errores encontrados: {len(errores)}\n"
+            if not errores:
+                info += "\n✓ Análisis semántico exitoso"
+            else:
+                info += f"\n⚠ Se encontraron {len(errores)} errores semánticos"
+            self.bottom_panels.add_text_to_tab("Semántico", info, clear=True)
+
+            # 8) Mostrar las pestañas relevantes
+            if errores:
+                left_notebook = self.bottom_panels.left_notebook
+                tabs = left_notebook.tabs()
+                for i, tab_id in enumerate(tabs):
+                    if left_notebook.tab(tab_id, "text") == "Errores Semánticos":
+                        left_notebook.select(i)
+                        break
+
+            # Cambiar a la pestaña de la tabla hash
+            right_notebook = self.bottom_panels.right_notebook
+            tabs = right_notebook.tabs()
+            for i, tab_id in enumerate(tabs):
+                if right_notebook.tab(tab_id, "text") == "Hash Table":
+                    right_notebook.select(i)
+                    break
+
+        except Exception as e:
+            error_msg = f"Error durante el análisis semántico: {str(e)}"
+            print(f"[Semántico] Error: {e}")
+            self.bottom_panels.add_text_to_tab("Errores Semánticos", error_msg, clear=True)
+            self.bottom_panels.add_text_to_tab("Semántico", f"ERROR: {error_msg}", clear=True)
 
         text_area = self.editor.text_area
         try:
@@ -190,18 +261,41 @@ class Toolbar:
             builder = SemanticASTBuilder()
             ast = builder.construir_ast(arbol_sintactico)
 
-            # 3) Semántico: construir TS e imprimirla
+            # 3) Semántico: construir TS y mostrar resultados
             sema = SemanticAnalyzer()
-            sema.analyze(ast)  # Imprime en terminal la Hash Table
+            mensaje, tabla_hash, errores = sema.analyze(ast)
 
-            # (Opcional) Mostrar status en panel derecho
+            # Mostrar la tabla hash en su panel correspondiente
+            text_widget = self.bottom_panels.get_text_widget("Hash Table")
+            if text_widget:
+                text_widget.config(state="normal")
+                text_widget.delete('1.0', tk.END)
+                
+                # Configurar la fuente para la tabla
+                text_widget.tag_configure("table_header", font=("Courier", 10, "bold"))
+                text_widget.tag_configure("table_content", font=("Courier", 10))
+                
+                # Insertar el contenido
+                lines = tabla_hash.split('\n')
+                for i, line in enumerate(lines):
+                    if i < 2:  # Encabezado y línea divisoria
+                        text_widget.insert(tk.END, line + "\n", "table_header")
+                    else:
+                        text_widget.insert(tk.END, line + "\n", "table_content")
+                text_widget.config(state="disabled")
+                text_widget.see('1.0')
+
+            # Mostrar errores en el panel de errores semánticos
+            if errores:
+                self.bottom_panels.add_text_to_tab("Errores Semánticos", errores, clear=True)
+            else:
+                self.bottom_panels.add_text_to_tab("Errores Semánticos", "No se encontraron errores semánticos", clear=True)
+
+            # Mostrar estado en el panel semántico
             info = "ANÁLISIS SEMÁNTICO COMPLETADO\n\n"
-            info += f"Estado: {'EXITOSO' if exito else 'CON ERRORES'}\n"
-            info += f"Errores semánticos: {len(sema.errors)}\n"
+            info += f"Estado: {'EXITOSO' if not errores else 'CON ERRORES'}\n"
+            info += f"Errores semánticos: {len(errores)}\n"
             self.bottom_panels.add_text_to_tab("Semántico", info, clear=True)
-
-            # (Si quieres llevar la tabla al UI, puedes hacer:)
-            # self.bottom_panels.add_text_to_tab("Hash Table", sema.ts.print_all(), clear=True)
 
         except Exception as e:
             print(f"[Semántico] Error: {e}")

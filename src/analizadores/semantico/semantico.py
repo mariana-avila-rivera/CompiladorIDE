@@ -15,23 +15,22 @@ class SemanticAnalyzer:
 
     def analyze(self, ast_root):
         if ast_root is None:
-            print("[Semántico] AST vacío")
-            return
+            return "[Semántico] AST vacío", "", []
+        
+        # Limpiar errores reportados al inicio de cada análisis
+        self._reported_errors.clear()
+        self.errors.clear()
+
+        self._visit(ast_root)
+        
+        # Devolver los resultados en lugar de imprimirlos
+        return "", self.ts.print_all_custom(), self.errors
         
         # Limpiar errores reportados al inicio de cada análisis
         self._reported_errors.clear()
 
         self._visit(ast_root)
-
-        # Imprimir TS en el formato solicitado
-        print("\nHASH TABLE:")
-        print(self.ts.print_all_custom())
-        print()
-
-        if self.errors:
-            print("ERRORES SEMÁNTICOS:")
-            for e in self.errors:
-                print(" -", e)
+        return "", self.ts.print_all_custom(), self.errors
 
     # ----------------- Recorrido -----------------
 
