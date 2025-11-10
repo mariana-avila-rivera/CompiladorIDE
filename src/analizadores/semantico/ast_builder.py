@@ -221,25 +221,37 @@ class SemanticASTBuilder:
             # Procesar la parte until/while
             kw = self._get_val(hijos[2])
             if kw == 'until':
-                # Asegurarse de procesar la expresión completa del until
+                # CLAVE: Usar _proc_expresion_completa para procesar la condición del until
                 un = NodoAST(tipo='until', valor='until')
-                # Buscar la expresión después del paréntesis
-                for i in range(4, len(hijos)):
-                    if self._get_val(hijos[i]) != ')':  # Ignorar el paréntesis
-                        cond = self._proc(hijos[i])
-                        if cond:
-                            un.agregar_hijo(cond)
+                # La expresión está en hijos[4] (después de '(' que está en hijos[3])
+                if len(hijos) > 4:
+                    # Procesar la expresión completa entre paréntesis
+                    cond = self._proc_expresion_completa(hijos[4])
+                    if cond:
+                        un.agregar_hijo(cond)
                 don.agregar_hijo(un)
             elif kw == 'while':
-                cond = self._proc(hijos[4]) if len(hijos) > 4 else None
+                # CLAVE: También para while usar _proc_expresion_completa
                 wn = NodoAST(tipo='while', valor='while')
-                if cond: wn.agregar_hijo(cond)
-                # bloque extra después de while
-                extra = self._proc(hijos[5]) if len(hijos) > 5 else None
-                if extra:
+                # La condición está en hijos[4]
+                if len(hijos) > 4:
+                    cond = self._proc_expresion_completa(hijos[4])
+                    if cond:
+                        wn.agregar_hijo(cond)
+                
+                # bloque extra después de while (hijos[6] en adelante, antes de 'end')
+                if len(hijos) > 6:
                     block = NodoAST(tipo='body', valor='body')
-                    for s in self._flatten(extra): block.agregar_hijo(s)
+                    for i in range(6, len(hijos)):
+                        if self._get_val(hijos[i]) == 'end':
+                            break
+                        extra = self._proc(hijos[i])
+                        if extra:
+                            for s in self._flatten(extra):
+                                if s:
+                                    block.agregar_hijo(s)
                     wn.agregar_hijo(block)
+                
                 don.agregar_hijo(wn)
             
             return don
