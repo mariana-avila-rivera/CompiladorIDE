@@ -255,14 +255,25 @@ class SemanticAnalyzer:
 
         # (4) Control de flujo: condiciones deben ser bool
         if node.tipo == 'if':
-            # hijos esperados: [cond, then, (else?)]
+            # Condición
             if node.hijos:
                 cond_t = self._infer(node.hijos[0])
                 if not self._is_truthy_type(cond_t):
                     self._report(f"La condición de 'if' debe ser bool o numérica, recibió {cond_t}", node.hijos[0])
-            # recorrer ramas
-            for ch in node.hijos[1:]:
-                self._visit(ch, node)
+
+            # THEN en nuevo scope
+            if len(node.hijos) > 1 and getattr(node.hijos[1], "tipo", "") == "then":
+                self.ts.push_scope()
+                for stmt in node.hijos[1].hijos:
+                    self._visit(stmt, node)
+                self.ts.pop_scope()
+
+            # ELSE en nuevo scope (si existe)
+            if len(node.hijos) > 2 and getattr(node.hijos[2], "tipo", "") == "else":
+                self.ts.push_scope()
+                for stmt in node.hijos[2].hijos:
+                    self._visit(stmt, node)
+                self.ts.pop_scope()
             return
 
         if node.tipo == 'while':
@@ -271,27 +282,29 @@ class SemanticAnalyzer:
                 if not self._is_truthy_type(cond_t):
                     self._report(f"La condición del while debe ser bool o numérica, recibió {cond_t}", node.hijos[0])
 
-                # cuerpo
                 if len(node.hijos) > 1 and getattr(node.hijos[1], "tipo", "") == "body":
+                    self.ts.push_scope()
                     for stmt in node.hijos[1].hijos:
                         self._visit(stmt, node)
+                    self.ts.pop_scope()
             return
 
+
         if node.tipo == 'do':
-            # visitar cuerpo
+            # cuerpo en nuevo scope
             for ch in node.hijos:
                 if getattr(ch, "tipo", "") == "body":
+                    self.ts.push_scope()
                     for stmt in ch.hijos:
                         self._visit(stmt, node)
+                    self.ts.pop_scope()
                 elif ch.tipo in ('until', 'while'):
                     if ch.hijos:
                         cond_t = self._infer(ch.hijos[0])
                         if not self._is_truthy_type(cond_t):
-                            kw = ch.tipo
-                            self._report(f"La condición del {kw} debe ser bool o numérica, recibió {cond_t}", ch.hijos[0])
-                    
-
+                            self._report(f"La condición del {ch.tipo} debe ser bool o numérica, recibió {cond_t}", ch.hijos[0])
             return
+
 
         # (5) cout: solo visitar expresiones
         if node.tipo == 'cout':
