@@ -7,6 +7,7 @@ from analizadores.sintactico import AnalizadorSintactico
 
 from analizadores.semantico import SemanticASTBuilder            
 from analizadores.semantico import SemanticAnalyzer       
+from analizadores.semantico.arbol_semantico import SemanticTreeBuilder
 
 class Toolbar:
     def __init__(self, root, file_manager, editor=None, bottom_panels=None):
@@ -166,17 +167,22 @@ class Toolbar:
             self.bottom_panels.show_syntactic_info(info_text)
 
     def analizar_semantico(self):
-        """Fase Semántica: construye AST, analiza tipos y muestra resultados."""
+        """Fase Semántica: construye AST, analiza tipos, genera árbol semántico y muestra resultados."""
         if not self.editor or not self.bottom_panels:
             return
 
         text_area = self.editor.text_area
         try:
+            print("\n" + "="*50)
+            print("[SEMÁNTICO] Iniciando análisis semántico")
+            print("="*50)
+            
             # 1) Análisis Léxico: obtener tokens
             tokens = tokenizar_codigo(text_area)
             if not tokens:
                 self.bottom_panels.add_text_to_tab("Errores Semánticos", "No se pudieron obtener tokens del código", clear=True)
                 return
+            print(f"[SEMÁNTICO] Tokens obtenidos: {len(tokens)}")
 
             # 2) Análisis Sintáctico: construir árbol
             analizador = AnalizadorSintactico()
@@ -186,21 +192,36 @@ class Toolbar:
             if not arbol_sintactico:
                 self.bottom_panels.add_text_to_tab("Errores Semánticos", "No se pudo generar el árbol sintáctico", clear=True)
                 return
+            print(f"[SEMÁNTICO] Árbol sintáctico generado")
 
             # 3) Construir AST normalizado
             builder = SemanticASTBuilder()
-            ast = builder.construir_ast(arbol_sintactico)
+            ast = builder.construir_ast(arbol_sintactico)  # ← CORRECCIÓN AQUÍ
+            print(f"[SEMÁNTICO] AST construido: {ast}")
 
             # 4) Análisis Semántico
             sema = SemanticAnalyzer()
             _, tabla_hash, errores = sema.analyze(ast)
+            print(f"[SEMÁNTICO] Análisis completado. Errores: {len(errores)}")
 
-            # 5) Mostrar Tabla Hash
+            # 5) Construir árbol semántico con valores evaluados Y errores
+            print("[SEMÁNTICO] Construyendo árbol semántico...")
+            tree_builder = SemanticTreeBuilder(sema.ts, errores)  # Pasar errores al builder
+            arbol_semantico = tree_builder.construir(ast)
+            print(f"[SEMÁNTICO] Árbol semántico construido")
+
+            # 6) Mostrar árbol semántico en la pestaña Semántico
+            if arbol_semantico:
+                print("[SEMÁNTICO] Mostrando árbol semántico en el panel...")
+                self.bottom_panels.show_semantic_tree(arbol_semantico)
+            else:
+                print("[SEMÁNTICO] ERROR: arbol_semantico es None")
+
+            # 7) Mostrar Tabla Hash
             self.bottom_panels.add_text_to_tab("Hash Table", tabla_hash, clear=True)
 
-            # 6) Mostrar Errores Semánticos
+            # 8) Mostrar Errores Semánticos
             if errores:
-                # errores es una lista de dicts: {msg, linea, columna}
                 errores_text = "ERRORES SEMÁNTICOS ENCONTRADOS:\n\n"
                 for i, e in enumerate(errores, start=1):
                     errores_text += f"{i}.  {e['msg']} (Línea: {e['linea']}, Columna: {e['columna']})\n"
@@ -208,18 +229,21 @@ class Toolbar:
             else:
                 self.bottom_panels.add_text_to_tab("Errores Semánticos", "✓ No se encontraron errores semánticos", clear=True)
 
-            # 7) Mostrar Estado del Análisis
+            # 9) Mostrar Estado del Análisis
             info = "ANÁLISIS SEMÁNTICO COMPLETADO\n\n"
             info += f"Estado: {'EXITOSO' if not errores else 'CON ERRORES'}\n"
             info += f"Tokens procesados: {len(tokens)}\n"
             info += f"Errores encontrados: {len(errores)}\n"
             if not errores:
                 info += "\n✓ Análisis semántico exitoso"
+                info += "\n✓ Árbol semántico generado con valores evaluados"
             else:
                 info += f"\n⚠ Se encontraron {len(errores)} errores semánticos"
-            self.bottom_panels.add_text_to_tab("Semántico", info, clear=True)
+            
+            if hasattr(self.bottom_panels, 'show_semantic_info'):
+                self.bottom_panels.show_semantic_info(info)
 
-            # 8) Mostrar las pestañas relevantes
+            # 10) Mostrar las pestañas relevantes
             if errores:
                 left_notebook = self.bottom_panels.left_notebook
                 tabs = left_notebook.tabs()
@@ -227,74 +251,25 @@ class Toolbar:
                     if left_notebook.tab(tab_id, "text") == "Errores Semánticos":
                         left_notebook.select(i)
                         break
+            else:
+                # Si no hay errores, mostrar la pestaña del árbol semántico
+                right_notebook = self.bottom_panels.right_notebook
+                tabs = right_notebook.tabs()
+                for i, tab_id in enumerate(tabs):
+                    if right_notebook.tab(tab_id, "text") == "Semántico":
+                        right_notebook.select(i)
+                        break
 
-            # Cambiar a la pestaña de la tabla hash
-            right_notebook = self.bottom_panels.right_notebook
-            tabs = right_notebook.tabs()
-            for i, tab_id in enumerate(tabs):
-                if right_notebook.tab(tab_id, "text") == "Hash Table":
-                    right_notebook.select(i)
-                    break
+            print("="*50)
+            print("[SEMÁNTICO] Análisis semántico finalizado")
+            print("="*50 + "\n")
 
         except Exception as e:
             error_msg = f"Error durante el análisis semántico: {str(e)}"
-            print(f"[Semántico] Error: {e}")
+            print(f"[SEMÁNTICO] ERROR CRÍTICO: {e}")
+            import traceback
+            traceback.print_exc()
             self.bottom_panels.add_text_to_tab("Errores Semánticos", error_msg, clear=True)
-            self.bottom_panels.add_text_to_tab("Semántico", f"ERROR: {error_msg}", clear=True)
-
-        text_area = self.editor.text_area
-        try:
-            # 1) LEX + SINT
-            tokens = tokenizar_codigo(text_area)
-            if not tokens:
-                print("[Semántico] No hay tokens")
-                return
-
-            analizador = AnalizadorSintactico()
-            analizador.inicializar()
-            exito, arbol_sintactico = analizador.analizar(tokens)
-
-            if not arbol_sintactico:
-                print("[Semántico] No se generó árbol sintáctico")
-                return
-
-            # 2) Construir AST
-            builder = SemanticASTBuilder()
-            ast = builder.construir_ast(arbol_sintactico)
-
-            # 3) Semántico: construir TS y mostrar resultados
-            sema = SemanticAnalyzer()
-            mensaje, tabla_hash, errores = sema.analyze(ast)
-
-            # Mostrar la tabla hash en su panel correspondiente
-            text_widget = self.bottom_panels.get_text_widget("Hash Table")
-            if text_widget:
-                text_widget.config(state="normal")
-                text_widget.delete('1.0', tk.END)
-                
-                # Configurar la fuente para la tabla
-                text_widget.tag_configure("table_header", font=("Courier", 10, "bold"))
-                text_widget.tag_configure("table_content", font=("Courier", 10))
-                
-                # Insertar el contenido
-                lines = tabla_hash.split('\n')
-                for i, line in enumerate(lines):
-                    if i < 2:  # Encabezado y línea divisoria
-                        text_widget.insert(tk.END, line + "\n", "table_header")
-                    else:
-                        text_widget.insert(tk.END, line + "\n", "table_content")
-                text_widget.config(state="disabled")
-                text_widget.see('1.0')
-
-            # Mostrar estado en el panel semántico
-            info = "ANÁLISIS SEMÁNTICO COMPLETADO\n\n"
-            info += f"Estado: {'EXITOSO' if not errores else 'CON ERRORES'}\n"
-            info += f"Errores semánticos: {len(errores)}\n"
-            self.bottom_panels.add_text_to_tab("Semántico", info, clear=True)
-
-        except Exception as e:
-            print(f"[Semántico] Error: {e}")
-            self.bottom_panels.add_text_to_tab("Semántico", f"ERROR: {e}", clear=True)
 
     def create_toolbar(self):
         self.toolbar_frame = tk.Frame(self.root) # Asigna el Frame a self.toolbar_frame

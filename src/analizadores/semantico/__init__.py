@@ -4,13 +4,17 @@ Módulo de análisis semántico
 Contiene el analizador semántico y la tabla de símbolos
 """
 
+from .ast_builder import SemanticASTBuilder
 from .semantico import SemanticAnalyzer
 from .symtab import ScopedSymTab, ExpType
-from .ast_builder import SemanticASTBuilder   
+from .arbol_semantico import SemanticTreeWidget, SemanticTreeBuilder, NodoSemantico
 
 __all__ = [
-    "SemanticAnalyzer",
-    "ScopedSymTab",
-    "ExpType",
-    "SemanticASTBuilder"
+    'SemanticASTBuilder',
+    'SemanticAnalyzer',
+    'ScopedSymTab',
+    'ExpType',
+    'SemanticTreeWidget',
+    'SemanticTreeBuilder',
+    'NodoSemantico'
 ]

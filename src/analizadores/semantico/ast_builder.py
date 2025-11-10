@@ -4,10 +4,11 @@ AST Builder para la fase Semántica.
 - Normaliza terminales (id, numero, cadena, booleano).
 - Ajusta nodos según la gramática extendida.
 - Transforma ++/-- en asignaciones.
+- CONSTRUYE CORRECTAMENTE EXPRESIONES ANIDADAS
 """
 
 from typing import List, Optional
-from analizadores.sintactico.ast_builder import NodoAST  # reutilizamos la clase de nodo
+from analizadores.sintactico.ast_builder import NodoAST
 
 # Precedencia: menor número = menor precedencia
 _PRECEDENCIA = {
@@ -117,7 +118,8 @@ class SemanticASTBuilder:
                 asign = NodoAST(tipo='=', valor='=')
                 asign.agregar_hijo(idn)
                 if len(op_children) > 1:
-                    expr = self._proc(op_children[1])
+                    # CLAVE: Procesar la expresión correctamente
+                    expr = self._proc_expresion_completa(op_children[1])
                     if expr: asign.agregar_hijo(expr)
                 return asign
 
@@ -126,7 +128,8 @@ class SemanticASTBuilder:
             ifn = NodoAST(tipo='if', valor='if')
             # hijos típicos: 'if' '(' expresion ')' 'then' lista_sentencias seleccion_aux
             if len(hijos) >= 6:
-                cond = self._proc(hijos[2])
+                # Procesar condición como expresión
+                cond = self._proc_expresion_completa(hijos[2])
                 then_body = self._proc(hijos[5])
                 if cond: ifn.agregar_hijo(cond)
                 then_node = NodoAST(tipo='then', valor='then')
@@ -156,8 +159,8 @@ class SemanticASTBuilder:
         if v == 'iteracion':
             wn = NodoAST(tipo='while', valor='while')
             if len(hijos) >= 4:
-                # La condición siempre está en el tercer hijo (después de 'while' y '(')
-                cond = self._proc(hijos[2])
+                # Procesar condición como expresión
+                cond = self._proc_expresion_completa(hijos[2])
                 if cond: 
                     wn.agregar_hijo(cond)
                 
@@ -271,18 +274,9 @@ class SemanticASTBuilder:
                 else: ret.append(ph)
             return ret
 
-        # Expresiones: reorganizar por precedencia
-        if v in ('expresion', 'expresion_simple', 'expresion_logica',
-                 'expresion_and', 'expresion_relacional', 'termino'):
-            planos = []
-            for h in hijos:
-                ph = self._proc(h)
-                if not ph: continue
-                if isinstance(ph, list): planos.extend(ph)
-                else: planos.append(ph)
-            return self._reorganizar(planos)
+        # ELIMINADO: No reorganizar expresiones aquí, usar _proc_expresion_completa
+        # Expresiones se procesan con el nuevo método
 
-        # operadores agrupadores
         if v in ('suma_op', 'operador_termino', 'mult_op', 'rel_op', 'asignacion_op'):
             planos = []
             for h in hijos:
@@ -299,21 +293,22 @@ class SemanticASTBuilder:
         # componente: ( expresion ) | numero | id | booleano | ! componente
         if v == 'componente':
             if len(hijos) == 3 and self._get_val(hijos[0]) == '(' and self._get_val(hijos[2]) == ')':
-                return self._proc(hijos[1])
+                # Procesar expresión entre paréntesis
+                return self._proc_expresion_completa(hijos[1])
             if len(hijos) == 2 and self._get_val(hijos[0]) == '!':
                 op = NodoAST(tipo='!', valor='!')
-                rhs = self._proc(hijos[1])
+                rhs = self._proc_expresion_completa(hijos[1])
                 if rhs: op.agregar_hijo(rhs)
                 return op
             if len(hijos) == 1:
                 return self._proc(hijos[0])
 
-        # Terminales normalizados
+        # Terminales
         if not hijos:
             return self._terminal(n)
 
-        # Por defecto: crea un nodo y cuelga hijos procesados
-        node = self._terminal(n)  # esto ya normaliza si es terminal; si no, devuelve etiqueta
+        # Por defecto
+        node = self._terminal(n)
         if node is None:
             node = NodoAST(tipo=v, valor=v)
         for h in hijos:
@@ -325,6 +320,160 @@ class SemanticASTBuilder:
             else:
                 node.agregar_hijo(ph)
         return node
+
+    # ----------------- NUEVO: Procesamiento de expresiones completas -----------------
+    
+    def _proc_expresion_completa(self, n):
+        """
+        Procesa una expresión COMPLETA, construyendo correctamente el árbol de operadores.
+        Recorre el árbol sintáctico y construye un árbol de expresión con operadores como padres.
+        """
+        if not n:
+            return None
+        
+        v = self._get_val(n)
+        hijos = getattr(n, 'hijos', [])
+        
+        print(f"[_proc_expresion_completa] Procesando: v={v}, hijos={len(hijos)}")
+        
+        # Terminales
+        if not hijos:
+            terminal = self._terminal(n)
+            if terminal:
+                print(f"[_proc_expresion_completa] Terminal: {terminal.valor}")
+            return terminal
+        
+        # CASOS ESPECIALES que NO deben recolectar elementos
+        
+        # Paréntesis: extraer la expresión interna directamente
+        if v == 'componente' and len(hijos) == 3:
+            if self._get_val(hijos[0]) == '(' and self._get_val(hijos[2]) == ')':
+                print(f"[_proc_expresion_completa] Paréntesis detectados, procesando expresión interna")
+                return self._proc_expresion_completa(hijos[1])
+        
+        # Operador unario !
+        if v == 'componente' and len(hijos) == 2:
+            if self._get_val(hijos[0]) == '!':
+                op = NodoAST(tipo='!', valor='!')
+                rhs = self._proc_expresion_completa(hijos[1])
+                if rhs:
+                    op.agregar_hijo(rhs)
+                return op
+        
+        # RECOLECCIÓN DE ELEMENTOS para construir el árbol
+        elementos = []
+        
+        for h in hijos:
+            hv = self._get_val(h)
+            
+            # Saltar símbolos omitibles
+            if hv in _SIMBOLOS_OMITIR:
+                continue
+            
+            # Nodos que son CONTENEDORES de expresiones (NO los procesamos recursivamente,
+            # sino que bajamos un nivel)
+            if hv in ('expresion', 'expresion_simple', 'expresion_logica', 'expresion_and', 
+                      'expresion_relacional', 'termino', 'componente'):
+                # Bajar un nivel - procesar el nodo hijo completo
+                proc = self._proc_expresion_completa(h)
+                if proc:
+                    if isinstance(proc, list):
+                        elementos.extend(proc)
+                    else:
+                        elementos.append(proc)
+            
+            # Nodos AUX: APLANAR COMPLETAMENTE todos los operadores y operandos
+            elif hv in ('expresion_simple_aux', 'termino_aux', 'expresion_logica_aux',
+                        'expresion_and_aux', 'expresion_relacional_aux'):
+                # CLAVE: Aplanar recursivamente TODO el nodo aux
+                aux_elementos = self._aplanar_aux(h)
+                elementos.extend(aux_elementos)
+            
+            # Nodos de operador: procesarlos
+            elif hv in ('suma_op', 'mult_op', 'rel_op', 'operador_termino'):
+                op = self._proc(h)
+                if op:
+                    if isinstance(op, list):
+                        elementos.extend(op)
+                    else:
+                        elementos.append(op)
+            
+            else:
+                # Otros nodos: procesar normalmente
+                proc = self._proc_expresion_completa(h)
+                if proc:
+                    if isinstance(proc, list):
+                        elementos.extend(proc)
+                    else:
+                        elementos.append(proc)
+        
+        print(f"[_proc_expresion_completa] Elementos recolectados: {[e.valor if isinstance(e, NodoAST) else str(e) for e in elementos]}")
+        
+        # Si no hay elementos, retornar None
+        if not elementos:
+            return None
+        
+        # Si solo hay un elemento, retornarlo
+        if len(elementos) == 1:
+            return elementos[0]
+        
+        # Reorganizar por precedencia
+        resultado = self._reorganizar(elementos)
+        if resultado:
+            print(f"[_proc_expresion_completa] Resultado: {resultado.valor} con {len(resultado.hijos)} hijos")
+        else:
+            print(f"[_proc_expresion_completa] Resultado: None")
+        return resultado
+    
+    def _aplanar_aux(self, nodo_aux):
+        """
+        Aplana COMPLETAMENTE un nodo *_aux, extrayendo todos los operadores y operandos
+        en orden lineal. 
+        
+        Estructura típica de *_aux:
+        - expresion_simple_aux → suma_op termino expresion_simple_aux
+        - termino_aux → operador_termino componente termino_aux
+        
+        Devuelve una lista plana: [operador1, operando1, operador2, operando2, ...]
+        """
+        if not nodo_aux:
+            return []
+        
+        hijos = getattr(nodo_aux, 'hijos', [])
+        if not hijos:
+            # Nodo aux vacío (producción ε)
+            return []
+        
+        elementos = []
+        
+        # Primer hijo: operador (suma_op, mult_op, rel_op, operador_termino)
+        if hijos:
+            op_nodo = hijos[0]
+            op = self._proc(op_nodo)
+            if op:
+                if isinstance(op, list):
+                    elementos.extend(op)
+                else:
+                    elementos.append(op)
+        
+        # Segundo hijo: operando (termino, componente, expresion_simple, etc.)
+        if len(hijos) > 1:
+            operando_nodo = hijos[1]
+            operando = self._proc_expresion_completa(operando_nodo)
+            if operando:
+                if isinstance(operando, list):
+                    elementos.extend(operando)
+                else:
+                    elementos.append(operando)
+        
+        # Tercer hijo: siguiente aux (RECURSIVO - aquí está la clave)
+        if len(hijos) > 2:
+            siguiente_aux = hijos[2]
+            # Aplanar recursivamente el siguiente aux
+            aux_elementos = self._aplanar_aux(siguiente_aux)
+            elementos.extend(aux_elementos)
+        
+        return elementos
 
     # ----------------- Utilidades -----------------
 
