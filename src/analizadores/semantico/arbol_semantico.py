@@ -730,7 +730,15 @@ class SemanticTreeBuilder:
                         if valor == '+': resultado = izq + der
                         elif valor == '-': resultado = izq - der
                         elif valor == '*': resultado = izq * der
-                        elif valor == '/': resultado = izq / der if der != 0 else None
+                        elif valor == '/':
+                            if der != 0:
+                                # División entera si ambos operandos son enteros
+                                if isinstance(izq, int) and isinstance(der, int):
+                                    resultado = izq // der  # División entera (trunca)
+                                else:
+                                    resultado = izq / der  # División flotante
+                            else:
+                                resultado = None
                         elif valor == '%': resultado = izq % der if der != 0 else None
                         elif valor == '^': resultado = izq ** der
                         
