@@ -12,6 +12,8 @@ from analizadores.codegen.pcode_generator import PCodeGenerator
 from analizadores.codegen.tm_generator import TMGenerator
 import subprocess
 import tempfile
+import threading
+import queue
 
 class Toolbar:
     def __init__(self, root, file_manager, editor=None, bottom_panels=None):
@@ -268,20 +270,8 @@ class Toolbar:
                     
                     print(f"[EXEC] Ejecutando TMVS con: {temp_tm_path}")
                     
-                    # Ejecutar en una nueva ventana de terminal para permitir interacción (cin)
-                    if os.name == 'nt': # Windows
-                        # Usamos cabal run para manejar dependencias (regex-compat, etc.)
-                        # -- pasa argumentos al ejecutable: archivo y tamaño de memoria (ej. 10000)
-                        cmd = f'start "Ejecucion TMVS" /D "{tmvs_root_dir}" cmd /k "cabal run tmvs-cli -- "{temp_tm_path}" 10000"'
-                        subprocess.Popen(cmd, shell=True)
-                        self.bottom_panels.add_text_to_tab("Código Intermedio", "\n\n[INFO] Ejecución iniciada en terminal externa (usando cabal)...", clear=False)
-                    else: # Linux/Mac (xterm o similar)
-                        # Intento genérico, puede requerir ajustes según el entorno
-                        try:
-                            subprocess.Popen(["x-terminal-emulator", "-e", f"cd '{tmvs_root_dir}' && cabal run tmvs-cli -- '{temp_tm_path}' 10000"])
-                            self.bottom_panels.add_text_to_tab("Código Intermedio", "\n\n[INFO] Ejecución iniciada en terminal externa (usando cabal)...", clear=False)
-                        except:
-                            print("No se pudo abrir terminal externa automáticamente.")
+                    # Ejecutar integrado en la GUI
+                    self.run_tmvs(temp_tm_path, tmvs_root_dir)
 
                 except Exception as e:
                     print(f"[CODEGEN] Error: {e}")
@@ -330,6 +320,96 @@ class Toolbar:
             import traceback
             traceback.print_exc()
             self.bottom_panels.add_text_to_tab("Errores Semánticos", error_msg, clear=True)
+
+    def run_tmvs(self, tm_path, tmvs_root):
+        # Limpiar pestaña de resultados
+        self.bottom_panels.add_text_to_tab("Resultados", "", clear=True)
+        
+        # Seleccionar pestaña de resultados
+        left_notebook = self.bottom_panels.left_notebook
+        tabs = left_notebook.tabs()
+        for i, tab_id in enumerate(tabs):
+            if left_notebook.tab(tab_id, "text") == "Resultados":
+                left_notebook.select(i)
+                break
+
+        # Comando de ejecución
+        cmd = ["cabal", "run", "tmvs-cli", "--", tm_path, "10000"]
+        
+        try:
+            # Iniciar proceso
+            self.process = subprocess.Popen(
+                cmd,
+                cwd=tmvs_root,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            
+            # Habilitar entrada si existe
+            if hasattr(self.bottom_panels, 'results_entry'):
+                def enable_entry():
+                    self.bottom_panels.results_entry.config(state="normal", bg="white")
+                    self.bottom_panels.results_entry.bind("<Return>", self.send_input)
+                    self.bottom_panels.results_entry.focus()
+                
+                self.root.after(100, enable_entry)
+
+            # Iniciar hilo de lectura
+            threading.Thread(target=self.read_output, args=(self.process,), daemon=True).start()
+            
+        except Exception as e:
+            self.bottom_panels.add_text_to_tab("Resultados", f"Error al iniciar proceso: {e}\n", clear=False)
+
+    def read_output(self, process):
+        while True:
+            char = process.stdout.read(1)
+            if not char:
+                if process.poll() is not None:
+                    break
+                continue
+            self.root.after(0, self.update_results, char)
+        
+        # Leer stderr si hay algo
+        err = process.stderr.read()
+        if err:
+            self.root.after(0, self.update_results, f"STDERR: {err}")
+            
+        self.root.after(0, self.disable_input)
+
+    def update_results(self, text):
+        self.bottom_panels.add_text_to_tab("Resultados", text, clear=False, auto_newline=False)
+        # Si detectamos que pide input, asegurarnos de que el entry esté habilitado
+        if "Input required" in text:
+             if hasattr(self.bottom_panels, 'results_entry'):
+                self.bottom_panels.results_entry.config(state="normal", bg="white")
+                self.bottom_panels.results_entry.focus()
+
+    def send_input(self, event):
+        if not hasattr(self, 'process') or self.process.poll() is not None:
+            return
+            
+        entry = self.bottom_panels.results_entry
+        text = entry.get()
+        entry.delete(0, tk.END)
+        
+        # Mostrar lo que escribió el usuario
+        self.update_results(f"{text}\n")
+        
+        # Enviar al proceso
+        try:
+            self.process.stdin.write(text + "\n")
+            self.process.stdin.flush()
+        except Exception as e:
+            self.update_results(f"Error enviando input: {e}\n")
+
+    def disable_input(self):
+        if hasattr(self.bottom_panels, 'results_entry'):
+            self.bottom_panels.results_entry.config(state="disabled", bg="#f0f0f0")
+            self.bottom_panels.results_entry.unbind("<Return>")
 
     def create_toolbar(self):
         self.toolbar_frame = tk.Frame(self.root) # Asigna el Frame a self.toolbar_frame

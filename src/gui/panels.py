@@ -42,8 +42,27 @@ class BottomPanels:
     def add_tabs(self, notebook, tab_names):
         for name in tab_names:
             frame = tk.Frame(notebook)
+            
+            if name == "Resultados":
+                # Frame para entrada de datos - Empaquetar PRIMERO al FONDO
+                input_frame = tk.Frame(frame)
+                input_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=5)
+                
+                lbl = tk.Label(input_frame, text="Input >")
+                lbl.pack(side=tk.LEFT)
+                
+                entry = tk.Entry(input_frame)
+                entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+                
+                # Guardar referencia
+                self.results_entry = entry
+                # Deshabilitar inicialmente
+                entry.config(state="disabled")
+
+            # Texto ocupa el resto
             text = scrolledtext.ScrolledText(frame, wrap=tk.WORD)
-            text.pack(expand=True, fill=tk.BOTH)
+            text.pack(side=tk.TOP, expand=True, fill=tk.BOTH)
+            
             notebook.add(frame, text=name)
             # Guardar referencia al widget de texto
             self.text_widgets[name] = text
@@ -199,17 +218,25 @@ class BottomPanels:
             info_widget.insert('1.0', info_text)
             info_widget.config(state="disabled")
     
-    def add_text_to_tab(self, tab_name, text, clear=False):
+    def add_text_to_tab(self, tab_name, text, clear=False, auto_newline=True):
         widget = self.get_text_widget(tab_name)
         if widget:
             widget.config(state="normal")
             if clear:
                 widget.delete("1.0", tk.END)
-            # Asegura string + salto de línea final
+            # Asegura string
             s = text if isinstance(text, str) else str(text)
-            if not s.endswith("\n"):
+            if auto_newline and not s.endswith("\n"):
                 s += "\n"
             widget.insert(tk.END, s)
-            widget.see("1.0")
+            
+            if clear:
+                widget.see("1.0")
+            else:
+                widget.see(tk.END)
+                
             widget.config(state="disabled")
+
+    def get_text_widget(self, tab_name):
+        return self.text_widgets.get(tab_name)
 
