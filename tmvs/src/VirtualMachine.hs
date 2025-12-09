@@ -124,6 +124,7 @@ executeTMinstruction inst@(RO roi r s t comment) dmem regs
     | roi == ADD    = (dmem, regs // [(r, regs!s + regs!t)], TMokay)
     | roi == SUB    = (dmem, regs // [(r, regs!s - regs!t)], TMokay)
     | roi == MUL    = (dmem, regs // [(r, regs!s * regs!t)], TMokay)
+    | roi == PWR    = (dmem, regs // [(r, regs!s ** regs!t)], TMokay)
     | roi == DIV    = if (regs!t == 0.0) then (dmem, regs, TMzeroDivide)
                                        else 
                                             let res = regs!s / regs!t

@@ -534,10 +534,14 @@ class ASTBuilder:
                 prec = precedencia[nodo.valor]
                 print(f"DEBUG: nodo {nodo.valor} en posición {i} tiene precedencia {prec}")
                 # Solo actualizar si encontramos menor precedencia
+                # Para asociatividad derecha (^), si la precedencia es igual, actualizamos (queremos el operador más a la izquierda como raíz)
                 if prec < min_precedencia:
                     min_precedencia = prec
                     operador_idx = i
                     print(f"DEBUG: nuevo operador seleccionado: {nodo.valor} con precedencia {prec}")
+                elif prec == min_precedencia and nodo.valor == '^':
+                    operador_idx = i
+                    print(f"DEBUG: operador asociativo derecho actualizado: {nodo.valor} con precedencia {prec}")
         
         if operador_idx == -1:
             # No hay operadores válidos, retornar el primer nodo si solo hay uno válido
