@@ -19,6 +19,17 @@ def _promote(a: str, b: str) -> str:
     if _is_numeric(a) and _is_numeric(b): return ExpType.TyFloat
     return ExpType.TyError
 
+def _promote_div(a: str, b: str) -> str:
+    """
+    Regla especial para división:
+    - Si alguno es float, resultado float.
+    - Si ambos son int, resultado int (división entera).
+    """
+    if ExpType.TyError in (a, b): return ExpType.TyError
+    if a == ExpType.TyFloat or b == ExpType.TyFloat: return ExpType.TyFloat
+    if a == ExpType.TyInt and b == ExpType.TyInt: return ExpType.TyInt
+    return ExpType.TyError
+
 def _assignable(dst: str, src: str) -> bool:
     if dst == ExpType.TyFloat and src in (ExpType.TyInt, ExpType.TyFloat): return True
     if dst == ExpType.TyInt and src == ExpType.TyInt: return True
@@ -147,6 +158,10 @@ class SemanticAnalyzer:
                 self._report(f"Operador '{v}' requiere operandos numéricos", node)
                 return ExpType.TyError
 
+            # división: regla especial int/int -> int, float/any -> float
+            if v == "/":
+                return _promote_div(lt, rt)
+            
             # potencia: resultado numérico con promoción
             if v == "^":
                 return _promote(lt, rt)

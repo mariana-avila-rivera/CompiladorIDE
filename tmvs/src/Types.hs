@@ -38,6 +38,7 @@ data ROInstruction = HALT
 		| SUB
 		| MUL
 		| DIV
+        | DVF
         | PWR
 	deriving (Show,Eq)
 

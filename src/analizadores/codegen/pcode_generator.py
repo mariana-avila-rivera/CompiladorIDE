@@ -3,10 +3,12 @@ class PCodeGenerator:
     def __init__(self):
         self.instructions = []
         self.label_count = 0
+        self.var_types = {}
 
     def generate(self, ast):
         self.instructions = []
         self.label_count = 0
+        self.var_types = {}
         if ast:
             self._process_node(ast)
         return self.instructions
@@ -20,6 +22,30 @@ class PCodeGenerator:
 
     def _emit_label(self, label):
         self.instructions.append(f"{label}:")
+
+    def _get_expr_type(self, node):
+        """Helper to guess the type of an expression node."""
+        if not node: return 'void'
+        
+        if node.tipo in ('numero', 'entero'):
+            # Check if it has a decimal point
+            if '.' in str(node.valor): return 'float'
+            return 'int'
+        if node.tipo == 'flotante': return 'float'
+        if node.tipo == 'booleano': return 'bool'
+        if node.tipo == 'cadena': return 'string'
+        
+        if node.tipo == 'id':
+            return self.var_types.get(node.valor, 'int') # Default to int if unknown
+            
+        if node.tipo in ('+', '-', '*', '/', '%', '^'):
+            if len(node.hijos) >= 2:
+                t1 = self._get_expr_type(node.hijos[0])
+                t2 = self._get_expr_type(node.hijos[1])
+                if t1 == 'float' or t2 == 'float': return 'float'
+                return 'int'
+                
+        return 'void'
 
     def _process_node(self, node):
         if not node:
@@ -40,8 +66,11 @@ class PCodeGenerator:
             for hijo in hijos:
                 self._process_node(hijo)
 
-        # Declaraciones (ignoradas en P-Code simple o solo espacio)
+        # Declaraciones
         elif tipo in ('int', 'float', 'bool', 'string', 'void'):
+            for hijo in hijos:
+                if hijo.tipo == 'id':
+                    self.var_types[hijo.valor] = tipo
             # Si hay inicialización, procesarla
             pass
 
@@ -155,7 +184,17 @@ class PCodeGenerator:
                     '==': 'equ', '!=': 'neq', '<': 'les', '<=': 'leq', '>': 'grt', '>=': 'geq',
                     '&&': 'and', 'and': 'and', '||': 'or', 'or': 'or'
                 }
-                self._emit(op_map.get(tipo, 'nop'))
+                
+                op_code = op_map.get(tipo, 'nop')
+                
+                # Special handling for division
+                if tipo == '/':
+                    t1 = self._get_expr_type(hijos[0])
+                    t2 = self._get_expr_type(hijos[1])
+                    if t1 == 'float' or t2 == 'float':
+                        op_code = 'dvf'
+                        
+                self._emit(op_code)
 
         # Identificador (R-Value)
         elif tipo == 'id':

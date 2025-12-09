@@ -128,11 +128,11 @@ executeTMinstruction inst@(RO roi r s t comment) dmem regs
     | roi == DIV    = if (regs!t == 0.0) then (dmem, regs, TMzeroDivide)
                                        else 
                                             let res = regs!s / regs!t
-                                                isInt x = x == fromInteger (round x)
-                                                val = if (isInt (regs!s) && isInt (regs!t)) 
-                                                      then fromIntegral (truncate res) 
-                                                      else res
-                                            in (dmem, regs // [(r, val)], TMokay)
+                                            in (dmem, regs // [(r, fromIntegral (truncate res))], TMokay)
+    | roi == DVF    = if (regs!t == 0.0) then (dmem, regs, TMzeroDivide)
+                                       else 
+                                            let res = regs!s / regs!t
+                                            in (dmem, regs // [(r, res)], TMokay)
 
 executeTMinstruction inst@(RM rmi r d s comment) dmem regs
     | elem rmi [LD,ST] = 
