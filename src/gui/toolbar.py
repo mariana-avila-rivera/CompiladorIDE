@@ -8,6 +8,7 @@ from analizadores.sintactico import AnalizadorSintactico
 from analizadores.semantico import SemanticASTBuilder            
 from analizadores.semantico import SemanticAnalyzer       
 from analizadores.semantico.arbol_semantico import SemanticTreeBuilder
+from analizadores.codegen.pcode_generator import PCodeGenerator
 
 class Toolbar:
     def __init__(self, root, file_manager, editor=None, bottom_panels=None):
@@ -228,6 +229,25 @@ class Toolbar:
                 self.bottom_panels.add_text_to_tab("Errores Semánticos", errores_text, clear=True)
             else:
                 self.bottom_panels.add_text_to_tab("Errores Semánticos", "✓ No se encontraron errores semánticos", clear=True)
+
+                # GENERACIÓN DE CÓDIGO INTERMEDIO (P-Code)
+                print("[CODEGEN] Iniciando generación de Código P...")
+                try:
+                    generator = PCodeGenerator()
+                    instructions = generator.generate(ast)
+                    
+                    pcode_text = "CÓDIGO P GENERADO:\n\n"
+                    for i, instr in enumerate(instructions):
+                        pcode_text += f"{i}\t{instr}\n"
+                        
+                    self.bottom_panels.add_text_to_tab("Código Intermedio", pcode_text, clear=True)
+                    print(f"[CODEGEN] Código P generado: {len(instructions)} instrucciones")
+                    
+                except Exception as e:
+                    print(f"[CODEGEN] Error: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    self.bottom_panels.add_text_to_tab("Código Intermedio", f"Error generando código: {e}", clear=True)
 
             # 9) Mostrar Estado del Análisis
             info = "ANÁLISIS SEMÁNTICO COMPLETADO\n\n"
