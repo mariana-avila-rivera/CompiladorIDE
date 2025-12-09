@@ -33,7 +33,7 @@ class PCodeGenerator:
         if tipo == 'programa':
             for hijo in hijos:
                 self._process_node(hijo)
-            # self._emit('stp') # Stop opcional
+            self._emit('stp')
 
         # Bloque de sentencias y contenedores
         elif tipo in ('body', 'then', 'else', 'bloque', 'lista_declaracion', 'declaracion', 'sentencia', 'lista_sentencias'):
@@ -133,16 +133,13 @@ class PCodeGenerator:
             for hijo in hijos:
                 # lda id
                 self._emit(f"lda {hijo.valor}")
-                # in (lee valor y lo pone en pila)
-                self._emit("in") 
-                # sto
-                self._emit("sto")
+                self._emit("rdi")
 
         # Output (cout)
         elif tipo == 'cout':
             for hijo in hijos:
                 self._process_node(hijo)
-                self._emit("out")
+                self._emit("wrt")
 
         # Operaciones Binarias
         elif tipo in ('+', '-', '*', '/', '%', '^', '==', '!=', '<', '<=', '>', '>=', '&&', '||', 'and', 'or'):

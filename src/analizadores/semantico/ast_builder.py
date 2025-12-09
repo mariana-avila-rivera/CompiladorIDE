@@ -256,6 +256,16 @@ class SemanticASTBuilder:
             
             return don
 
+        # elemento_salida → cadena | expresion
+        if v == 'elemento_salida':
+            if not hijos: return None
+            child = hijos[0]
+            # Si es cadena, procesar normal
+            if self._get_val(child) == 'cadena':
+                return self._proc(child)
+            # Si no, es expresion, usar _proc_expresion_completa
+            return self._proc_expresion_completa(child)
+
         # cout << lista_salida ;
         if v == 'sent_out':
             cn = NodoAST(tipo='cout', valor='cout')
