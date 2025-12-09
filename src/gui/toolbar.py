@@ -195,6 +195,23 @@ class Toolbar:
             analizador.inicializar()
             exito, arbol_sintactico = analizador.analizar(tokens)
 
+            # Verificar errores sintácticos antes de continuar
+            errores_sintacticos = analizador.obtener_errores()
+            if errores_sintacticos:
+                msg = "No se puede continuar con el análisis semántico debido a errores sintácticos:\n\n"
+                for e in errores_sintacticos:
+                    msg += f"- {e['mensaje']} (Línea {e['linea']})\n"
+                self.bottom_panels.add_text_to_tab("Errores Semánticos", msg, clear=True)
+                
+                # Seleccionar pestaña de errores sintácticos
+                left_notebook = self.bottom_panels.left_notebook
+                tabs = left_notebook.tabs()
+                for i, tab_id in enumerate(tabs):
+                    if left_notebook.tab(tab_id, "text") == "Errores Sintácticos":
+                        left_notebook.select(i)
+                        break
+                return
+
             if not arbol_sintactico:
                 self.bottom_panels.add_text_to_tab("Errores Semánticos", "No se pudo generar el árbol sintáctico", clear=True)
                 return
