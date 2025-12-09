@@ -121,10 +121,12 @@ class TMGenerator:
                 
             elif op == 'wrt': # Write
                 self._pop_to(0)
-                self._emit_ro("OUT", 0, 0, 0, "write ac")
+                comment = f"write:{arg}" if arg else "write"
+                self._emit_ro("OUT", 0, 0, 0, comment)
                 
             elif op == 'rdi': # Read Integer (to address at top)
-                self._emit_ro("IN", 0, 0, 0, "read to ac")
+                comment = f"read:{arg}" if arg else "read to ac"
+                self._emit_ro("IN", 0, 0, 0, comment)
                 self._pop_to(2) # Addr en R2
                 self._emit_ro("ADD", 2, 2, 6, "calc abs addr")
                 self._emit("ST", 0, 0, 2, "store read val")

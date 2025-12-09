@@ -133,13 +133,16 @@ class PCodeGenerator:
             for hijo in hijos:
                 # lda id
                 self._emit(f"lda {hijo.valor}")
-                self._emit("rdi")
+                self._emit(f"rdi {hijo.valor}")
 
         # Output (cout)
         elif tipo == 'cout':
             for hijo in hijos:
                 self._process_node(hijo)
-                self._emit("wrt")
+                if hijo.tipo == 'id':
+                    self._emit(f"wrt {hijo.valor}")
+                else:
+                    self._emit("wrt")
 
         # Operaciones Binarias
         elif tipo in ('+', '-', '*', '/', '%', '^', '==', '!=', '<', '<=', '>', '>=', '&&', '||', 'and', 'or'):
