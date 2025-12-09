@@ -1,0 +1,21 @@
+cabal-version:       2.4
+name:                tmvs
+version:             0.1.0.0
+synopsis:            Tiny Machine Visual Simulator (CLI Version)
+license:             GPL-3.0-or-later
+author:              David White
+maintainer:          none
+category:            Development
+build-type:          Simple
+
+executable tmvs-cli
+  main-is:             tmvs-cli.hs
+  other-modules:       Constants
+                       ReadTMcode
+                       Types
+                       VirtualMachine
+  hs-source-dirs:      src
+  build-depends:       base >= 4.7 && < 5
+                     , array
+                     , regex-compat
+  default-language:    Haskell2010

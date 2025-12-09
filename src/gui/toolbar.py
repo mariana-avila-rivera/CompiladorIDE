@@ -9,6 +9,9 @@ from analizadores.semantico import SemanticASTBuilder
 from analizadores.semantico import SemanticAnalyzer       
 from analizadores.semantico.arbol_semantico import SemanticTreeBuilder
 from analizadores.codegen.pcode_generator import PCodeGenerator
+from analizadores.codegen.tm_generator import TMGenerator
+import subprocess
+import tempfile
 
 class Toolbar:
     def __init__(self, root, file_manager, editor=None, bottom_panels=None):
@@ -243,6 +246,43 @@ class Toolbar:
                     self.bottom_panels.add_text_to_tab("Código Intermedio", pcode_text, clear=True)
                     print(f"[CODEGEN] Código P generado: {len(instructions)} instrucciones")
                     
+                    # GENERACIÓN DE CÓDIGO TM Y EJECUCIÓN
+                    print("[CODEGEN] Generando código TM...")
+                    tm_gen = TMGenerator()
+                    
+                    # Usar directorio temporal del sistema
+                    temp_dir = tempfile.gettempdir()
+                    temp_tm_path = os.path.join(temp_dir, "CompiladorIDE_output.tm")
+                    
+                    tm_gen.generate(instructions, temp_tm_path)
+                    print(f"[CODEGEN] Archivo TM generado en: {temp_tm_path}")
+                    
+                    # Ejecutar TMVS CLI
+                    # Asumimos que el ejecutable de tmvs está compilado o usamos runghc si está instalado GHC
+                    # Buscamos tmvs-cli.exe o similar.
+                    # Dado el workspace, parece que tmvs está en tmvs/src.
+                    # Intentaremos ejecutarlo con runghc si está disponible, o buscar el binario.
+                    
+                    # Ruta al directorio raíz de TMVS (donde está tmvs.cabal)
+                    tmvs_root_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "tmvs"))
+                    
+                    print(f"[EXEC] Ejecutando TMVS con: {temp_tm_path}")
+                    
+                    # Ejecutar en una nueva ventana de terminal para permitir interacción (cin)
+                    if os.name == 'nt': # Windows
+                        # Usamos cabal run para manejar dependencias (regex-compat, etc.)
+                        # -- pasa argumentos al ejecutable: archivo y tamaño de memoria (ej. 10000)
+                        cmd = f'start "Ejecucion TMVS" /D "{tmvs_root_dir}" cmd /k "cabal run tmvs-cli -- "{temp_tm_path}" 10000"'
+                        subprocess.Popen(cmd, shell=True)
+                        self.bottom_panels.add_text_to_tab("Código Intermedio", "\n\n[INFO] Ejecución iniciada en terminal externa (usando cabal)...", clear=False)
+                    else: # Linux/Mac (xterm o similar)
+                        # Intento genérico, puede requerir ajustes según el entorno
+                        try:
+                            subprocess.Popen(["x-terminal-emulator", "-e", f"cd '{tmvs_root_dir}' && cabal run tmvs-cli -- '{temp_tm_path}' 10000"])
+                            self.bottom_panels.add_text_to_tab("Código Intermedio", "\n\n[INFO] Ejecución iniciada en terminal externa (usando cabal)...", clear=False)
+                        except:
+                            print("No se pudo abrir terminal externa automáticamente.")
+
                 except Exception as e:
                     print(f"[CODEGEN] Error: {e}")
                     import traceback
