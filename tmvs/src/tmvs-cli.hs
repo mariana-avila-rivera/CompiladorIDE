@@ -55,6 +55,8 @@ runLoop state = do
             
             hFlush stdout
             inputStr <- getLine
+            -- Add a newline to separate input from subsequent output in case of pipe buffering issues
+            putStrLn ""
             let val = read inputStr :: Double
             let regs = getTMstateRegs newState
             let newRegs = regs // [(r, val)]

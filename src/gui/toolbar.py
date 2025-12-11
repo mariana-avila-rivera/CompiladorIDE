@@ -339,6 +339,19 @@ class Toolbar:
             self.bottom_panels.add_text_to_tab("Errores Semánticos", error_msg, clear=True)
 
     def run_tmvs(self, tm_path, tmvs_root):
+        # Matar proceso anterior si existe
+        if hasattr(self, 'process') and self.process:
+            try:
+                if self.process.poll() is None: # Si sigue corriendo
+                    self.process.terminate()
+                    try:
+                        self.process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        self.process.kill()
+            except Exception as e:
+                print(f"Error matando proceso anterior: {e}")
+            self.process = None
+
         # Limpiar pestaña de resultados
         self.bottom_panels.add_text_to_tab("Resultados", "", clear=True)
         
@@ -366,14 +379,8 @@ class Toolbar:
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
             )
             
-            # Habilitar entrada si existe
-            if hasattr(self.bottom_panels, 'results_entry'):
-                def enable_entry():
-                    self.bottom_panels.results_entry.config(state="normal", bg="white")
-                    self.bottom_panels.results_entry.bind("<Return>", self.send_input)
-                    self.bottom_panels.results_entry.focus()
-                
-                self.root.after(100, enable_entry)
+            # Asegurar que la entrada inicie deshabilitada
+            self.disable_input()
 
             # Iniciar hilo de lectura
             threading.Thread(target=self.read_output, args=(self.process,), daemon=True).start()
@@ -382,13 +389,23 @@ class Toolbar:
             self.bottom_panels.add_text_to_tab("Resultados", f"Error al iniciar proceso: {e}\n", clear=False)
 
     def read_output(self, process):
+        buffer = ""
         while True:
             char = process.stdout.read(1)
             if not char:
                 if process.poll() is not None:
                     break
                 continue
+            
             self.root.after(0, self.update_results, char)
+            
+            # Detectar prompts para habilitar input
+            buffer += char
+            if buffer.endswith("\n"):
+                buffer = ""
+            elif buffer.endswith(": ") or buffer.endswith(" = "):
+                self.root.after(0, self.enable_input)
+                buffer = "" # Reset buffer after detection to avoid repeated triggers
         
         # Leer stderr si hay algo
         err = process.stderr.read()
@@ -397,13 +414,14 @@ class Toolbar:
             
         self.root.after(0, self.disable_input)
 
+    def enable_input(self):
+        if hasattr(self.bottom_panels, 'results_entry'):
+            self.bottom_panels.results_entry.config(state="normal", bg="white")
+            self.bottom_panels.results_entry.bind("<Return>", self.send_input)
+            self.bottom_panels.results_entry.focus()
+
     def update_results(self, text):
         self.bottom_panels.add_text_to_tab("Resultados", text, clear=False, auto_newline=False)
-        # Si detectamos que pide input, asegurarnos de que el entry esté habilitado
-        if "Input required" in text:
-             if hasattr(self.bottom_panels, 'results_entry'):
-                self.bottom_panels.results_entry.config(state="normal", bg="white")
-                self.bottom_panels.results_entry.focus()
 
     def send_input(self, event):
         if not hasattr(self, 'process') or self.process.poll() is not None:
@@ -420,6 +438,8 @@ class Toolbar:
         try:
             self.process.stdin.write(text + "\n")
             self.process.stdin.flush()
+            # Deshabilitar input hasta el próximo prompt
+            self.disable_input()
         except Exception as e:
             self.update_results(f"Error enviando input: {e}\n")
 
