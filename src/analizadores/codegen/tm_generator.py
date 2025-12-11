@@ -111,6 +111,8 @@ class TMGenerator:
                 self._binary_op("DIV")
             elif op == 'dvf': # Div Float
                 self._binary_op("DVF")
+            elif op == 'mod': # Modulo
+                self._binary_op("MOD")
             elif op == 'pwr': # Power
                 self._binary_op("PWR")
             

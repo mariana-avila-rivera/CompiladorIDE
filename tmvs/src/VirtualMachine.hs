@@ -133,6 +133,10 @@ executeTMinstruction inst@(RO roi r s t comment) dmem regs
                                        else 
                                             let res = regs!s / regs!t
                                             in (dmem, regs // [(r, res)], TMokay)
+    | roi == MOD    = if (regs!t == 0.0) then (dmem, regs, TMzeroDivide)
+                                       else 
+                                            let res = (truncate (regs!s)) `mod` (truncate (regs!t))
+                                            in (dmem, regs // [(r, fromIntegral res)], TMokay)
 
 executeTMinstruction inst@(RM rmi r d s comment) dmem regs
     | elem rmi [LD,ST] = 

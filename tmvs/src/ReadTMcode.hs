@@ -83,6 +83,7 @@ strToROInstruction str =
         "MUL"   -> MUL
         "DIV"   -> DIV
         "DVF"   -> DVF
+        "MOD"   -> MOD
         "PWR"   -> PWR
         otherwise -> error ("String " ++ (show str) ++ "is not a valid RO instruction\n")
     
