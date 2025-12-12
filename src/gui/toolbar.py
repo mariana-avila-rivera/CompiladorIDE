@@ -1,6 +1,7 @@
 # Toolbar.py
 import tkinter as tk
 import os
+import sys
 from tkinter import ttk
 from analizadores.lexico import resaltar_palabras, tokenizar_codigo
 from analizadores.sintactico import AnalizadorSintactico
@@ -24,15 +25,31 @@ class Toolbar:
         self.toolbar_frame = None  # Añade un atributo para el frame de la toolbar
         self.create_toolbar()
 
+    def get_resource_path(self, relative_path):
+        """Obtiene la ruta absoluta al recurso, funcionando tanto en dev como en PyInstaller"""
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        return os.path.join(base_path, relative_path)
+
     def resize_icon(self, image_path, size=(18, 18)):
         try:
-            icon = tk.PhotoImage(file=image_path)
+            full_path = self.get_resource_path(image_path)
+            icon = tk.PhotoImage(file=full_path)
             return icon.subsample(int(icon.width() / size[0]),
                                   int(icon.height() / size[1]))
         except Exception as e:
             print(f"Error cargando el icono {image_path}: {e}")
-            print("Directorio actual:", os.getcwd())
-            return None
+            # Intentar ruta original por si acaso
+            try:
+                icon = tk.PhotoImage(file=image_path)
+                return icon.subsample(int(icon.width() / size[0]),
+                                      int(icon.height() / size[1]))
+            except:
+                return None
+
     
     def analizar_lexico(self):
         """Analiza el código usando el analizador léxico y muestra los errores en la pestaña correspondiente"""
@@ -277,18 +294,12 @@ class Toolbar:
                     print(f"[CODEGEN] Archivo TM generado en: {temp_tm_path}")
                     
                     # Ejecutar TMVS CLI
-                    # Asumimos que el ejecutable de tmvs está compilado o usamos runghc si está instalado GHC
-                    # Buscamos tmvs-cli.exe o similar.
-                    # Dado el workspace, parece que tmvs está en tmvs/src.
-                    # Intentaremos ejecutarlo con runghc si está disponible, o buscar el binario.
-                    
-                    # Ruta al directorio raíz de TMVS (donde está tmvs.cabal)
-                    tmvs_root_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "tmvs"))
+                    # Asumimos que el ejecutable de tmvs está compilado y empaquetado
                     
                     print(f"[EXEC] Ejecutando TMVS con: {temp_tm_path}")
                     
                     # Ejecutar integrado en la GUI
-                    self.run_tmvs(temp_tm_path, tmvs_root_dir)
+                    self.run_tmvs(temp_tm_path)
 
                 except Exception as e:
                     print(f"[CODEGEN] Error: {e}")
@@ -338,7 +349,24 @@ class Toolbar:
             traceback.print_exc()
             self.bottom_panels.add_text_to_tab("Errores Semánticos", error_msg, clear=True)
 
-    def run_tmvs(self, tm_path, tmvs_root):
+    def get_tmvs_executable_path(self):
+        """Retorna la ruta al ejecutable de la TM"""
+        if getattr(sys, 'frozen', False):
+            # Si estamos corriendo como ejecutable (PyInstaller)
+            # El ejecutable estará en la carpeta temporal _MEIPASS/bin
+            base_path = sys._MEIPASS
+            exe_path = os.path.join(base_path, 'bin', 'tmvs-cli.exe')
+        else:
+            # Si estamos corriendo desde código fuente
+            # El ejecutable está en src/bin/tmvs-cli.exe
+            # self es Toolbar, está en src/gui/toolbar.py
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # Subir a src/ y luego a bin/
+            exe_path = os.path.join(current_dir, '..', 'bin', 'tmvs-cli.exe')
+        
+        return os.path.abspath(exe_path)
+
+    def run_tmvs(self, tm_path, tmvs_root=None):
         # Matar proceso anterior si existe
         if hasattr(self, 'process') and self.process:
             try:
@@ -363,14 +391,21 @@ class Toolbar:
                 left_notebook.select(i)
                 break
 
+        tm_exe = self.get_tmvs_executable_path()
+        print(f"[EXEC] Buscando TM en: {tm_exe}")
+
+        if not os.path.exists(tm_exe):
+             self.bottom_panels.add_text_to_tab("Resultados", f"Error: No se encontró el ejecutable de la TM en: {tm_exe}\nPor favor asegúrese de que 'src/bin/tmvs-cli.exe' exista.", clear=False)
+             return
+
         # Comando de ejecución
-        cmd = ["cabal", "run", "tmvs-cli", "--", tm_path, "10000"]
+        cmd = [tm_exe, tm_path, "10000"]
         
         try:
             # Iniciar proceso
             self.process = subprocess.Popen(
                 cmd,
-                cwd=tmvs_root,
+                # cwd=tmvs_root, # No es necesario cambiar de directorio
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

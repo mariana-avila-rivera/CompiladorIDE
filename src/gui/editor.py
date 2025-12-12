@@ -16,10 +16,11 @@ class CodeEditor:
     def create_widgets(self):
         # Frame principal
         self.editor_frame = tk.Frame(self.parent)
+        # NOTA: No empaquetamos editor_frame aquí porque será añadido al PanedWindow en app.py
 
         # Agregando Labels para mostrar Linea: Columna
-        # Crear un frame contenedor para la barra de estado
-        self.status_bar = tk.Frame(self.parent, height=20, bg="#e0e0e0")
+        # Crear un frame contenedor para la barra de estado (ahora hijo de editor_frame)
+        self.status_bar = tk.Frame(self.editor_frame, height=20, bg="#e0e0e0")
         self.status_bar.pack(side=tk.TOP, fill=tk.X)
 
         # Crear el label de línea
@@ -32,20 +33,24 @@ class CodeEditor:
                                   text="Columna: 1", anchor="w", bg="#e0e0e0")
         self.col_label.pack(side=tk.LEFT, padx=10)
 
-        # Área de texto
+        # Frame contenedor para texto y scrollbars
+        self.text_frame = tk.Frame(self.editor_frame)
+        self.text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Área de texto (hijo de text_frame)
         self.text_area = tk.Text(
-            self.editor_frame,
+            self.text_frame,
             wrap=tk.WORD,
             undo=True,
             font=("Courier", 10)
         )
 
-        # Scrollbars
-        self.scroll_y = tk.Scrollbar(self.editor_frame, orient="vertical")
+        # Scrollbars (hijo de text_frame)
+        self.scroll_y = tk.Scrollbar(self.text_frame, orient="vertical")
 
-        # Números de línea
+        # Números de línea (hijo de text_frame)
         self.line_numbers = tk.Text(
-            self.editor_frame,
+            self.text_frame,
             width=4,
             padx=5,
             bg="lightgray",
@@ -56,19 +61,19 @@ class CodeEditor:
             yscrollcommand=self.scroll_y.set
         )
 
-        # Empaquetado
-        self.line_numbers.pack(side=tk.LEFT, fill=tk.Y, pady=(23, 0))
-        self.text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=(23, 0))
+        # Empaquetado (sin pady extraños)
+        self.line_numbers.pack(side=tk.LEFT, fill=tk.Y)
+        self.text_area.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         self.scroll_y.config(
             command=lambda *args: [self.line_numbers.yview(*args),
                                    self.text_area.yview(*args)])
-        self.scroll_y.pack(side=tk.RIGHT, fill=tk.Y, pady=(23, 0))
+        self.scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.scroll_x = tk.Scrollbar(self.editor_frame, orient="horizontal",
+        self.scroll_x = tk.Scrollbar(self.text_frame, orient="horizontal",
                                      command=self.text_area.xview)
-
-        self.editor_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # self.editor_frame.pack(fill=tk.BOTH, expand=True) # ELIMINADO
         self.text_area.config(wrap="none", xscrollcommand=self.scroll_x.set)
 
     def update_after_realize(self, event=None):
